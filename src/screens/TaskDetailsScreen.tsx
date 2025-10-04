@@ -26,11 +26,21 @@ const TaskDetailsScreen = () => {
   const fetchTask = async () => {
     try {
       setIsLoading(true);
+      console.log('Fetching task with ID:', taskId);
       const response = await apiService.getTaskById(taskId);
       
+      console.log('TaskDetailsScreen - API Response:', response);
+      console.log('TaskDetailsScreen - Task Data:', response.data);
+      
       if (response.success && response.data) {
+        console.log('Setting task data:', response.data);
+        console.log('Task title:', response.data.title);
+        console.log('Task description:', response.data.description);
+        console.log('Task project:', response.data.project);
+        console.log('Task assignee:', response.data.assignee);
         setTask(response.data);
       } else {
+        console.error('Failed to fetch task:', response.error);
         Alert.alert('Error', 'Failed to load task details');
         navigation.goBack();
       }
@@ -121,6 +131,13 @@ const TaskDetailsScreen = () => {
     );
   }
 
+  // Debug logging for task data
+  console.log('TaskDetailsScreen - Rendering with task:', task);
+  console.log('TaskDetailsScreen - Task title:', task?.title);
+  console.log('TaskDetailsScreen - Task description:', task?.description);
+  console.log('TaskDetailsScreen - Task project:', task?.project);
+  console.log('TaskDetailsScreen - Task assignee:', task?.assignee);
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -141,66 +158,66 @@ const TaskDetailsScreen = () => {
         {/* Task Info */}
         <View style={styles.taskInfo}>
           <View style={styles.taskHeader}>
-            <Text style={styles.taskTitle}>{task.title}</Text>
+            <Text style={styles.taskTitle}>{task?.title || 'No Title'}</Text>
             <View style={styles.taskMeta}>
               <View style={styles.priorityContainer}>
                 <View
                   style={[
                     styles.priorityDot,
-                    { backgroundColor: getPriorityColor(task.priority) },
+                    { backgroundColor: getPriorityColor(task?.priority || 'Medium') },
                   ]}
                 />
-                <Text style={styles.priorityText}>{task.priority} Priority</Text>
+                <Text style={styles.priorityText}>{task?.priority || 'Medium'} Priority</Text>
               </View>
               <View
                 style={[
                   styles.statusBadge,
-                  { backgroundColor: getStatusColor(task.status).bg },
+                  { backgroundColor: getStatusColor(task?.status || 'To Do').bg },
                 ]}
               >
                 <Text
                   style={[
                     styles.statusText,
-                    { color: getStatusColor(task.status).text },
+                    { color: getStatusColor(task?.status || 'To Do').text },
                   ]}
                 >
-                  {task.status}
+                  {task?.status || 'To Do'}
                 </Text>
               </View>
             </View>
           </View>
 
-          <Text style={styles.taskDescription}>{task.description}</Text>
+          <Text style={styles.taskDescription}>{task?.description || 'No description provided'}</Text>
 
           {/* Task Details */}
           <View style={styles.detailsGrid}>
             <View style={styles.detailItem}>
               <Text style={styles.detailLabel}>Project</Text>
-              <Text style={styles.detailValue}>{task.project}</Text>
+              <Text style={styles.detailValue}>{task?.project || 'No project'}</Text>
             </View>
             <View style={styles.detailItem}>
               <Text style={styles.detailLabel}>Assignee</Text>
-              <Text style={styles.detailValue}>{task.assignee}</Text>
+              <Text style={styles.detailValue}>{task?.assignee || 'No assignee'}</Text>
             </View>
             <View style={styles.detailItem}>
               <Text style={styles.detailLabel}>Start Date</Text>
               <Text style={styles.detailValue}>
-                {new Date(task.startDate).toLocaleDateString()}
+                {task?.startDate ? new Date(task.startDate).toLocaleDateString() : 'Not set'}
               </Text>
             </View>
             <View style={styles.detailItem}>
               <Text style={styles.detailLabel}>Due Date</Text>
               <Text style={styles.detailValue}>
-                {new Date(task.dueDate).toLocaleDateString()}
+                {task?.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'Not set'}
               </Text>
             </View>
             <View style={styles.detailItem}>
               <Text style={styles.detailLabel}>Estimated Hours</Text>
-              <Text style={styles.detailValue}>{task.estimatedHours}h</Text>
+              <Text style={styles.detailValue}>{task?.estimatedHours || 0}h</Text>
             </View>
             <View style={styles.detailItem}>
               <Text style={styles.detailLabel}>Time Spent</Text>
-              <Text style={styles.detailValue}>{task.timeSpent}h</Text>
+              <Text style={styles.detailValue}>{task?.timeSpent || '0'}h</Text>
             </View>
           </View>
 
@@ -208,20 +225,20 @@ const TaskDetailsScreen = () => {
           <View style={styles.progressSection}>
             <View style={styles.progressHeader}>
               <Text style={styles.progressLabel}>Progress</Text>
-              <Text style={styles.progressPercentage}>{task.progress}%</Text>
+              <Text style={styles.progressPercentage}>{task?.progress || 0}%</Text>
             </View>
             <View style={styles.progressBar}>
               <View
                 style={[
                   styles.progressFill,
-                  { width: `${task.progress}%` },
+                  { width: `${task?.progress || 0}%` },
                 ]}
               />
             </View>
           </View>
 
           {/* Tags */}
-          {task.tags && (
+          {task?.tags && task.tags.trim() && (
             <View style={styles.tagsSection}>
               <Text style={styles.sectionTitle}>Tags</Text>
               <View style={styles.tagsContainer}>
@@ -236,7 +253,7 @@ const TaskDetailsScreen = () => {
 
           {/* Comments Section */}
           <View style={styles.commentsSection}>
-            <Text style={styles.sectionTitle}>Comments ({task.comments})</Text>
+            <Text style={styles.sectionTitle}>Comments ({task?.comments || '0'})</Text>
             
             {/* Comment Input */}
             <View style={styles.commentInputContainer}>

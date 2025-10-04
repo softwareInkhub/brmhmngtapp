@@ -179,11 +179,15 @@ class ApiService {
   }
 
   async getTaskById(taskId: string): Promise<ApiResponse<Task>> {
+    console.log('API Service - Fetching task by ID:', taskId);
     const response = await this.makeRequest<any>(`?tableName=project-management-tasks&id=${taskId}`, {
       method: 'GET',
     });
 
+    console.log('API Service - Raw response for getTaskById:', response);
+
     if (!response.success) {
+      console.log('API Service - Request failed:', response.error);
       return response;
     }
 
@@ -193,22 +197,30 @@ class ApiService {
     if (response.data && response.data.item) {
       // Response with item object
       task = response.data.item;
+      console.log('API Service - Using item format, task:', task);
     } else if (response.data && response.data.data) {
       // Response with data object
       task = response.data.data;
+      console.log('API Service - Using data format, task:', task);
     } else if (response.data && response.data.result) {
       // Response with result object
       task = response.data.result;
+      console.log('API Service - Using result format, task:', task);
     } else if (response.data && !Array.isArray(response.data)) {
       // Direct object response
       task = response.data;
+      console.log('API Service - Using direct format, task:', task);
     } else {
-      console.log('Unexpected response format for single task:', response.data);
+      console.log('API Service - Unexpected response format for single task:', response.data);
       return {
         success: false,
         error: 'Unexpected response format from API',
       };
     }
+
+    console.log('API Service - Final task data being returned:', task);
+    console.log('API Service - Task title:', task?.title);
+    console.log('API Service - Task description:', task?.description);
 
     return {
       success: true,
