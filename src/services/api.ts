@@ -130,29 +130,36 @@ class ApiService {
     }
 
     // Handle different possible response formats for creation
-    let createdTask: Task;
+    let rawCreatedTask: any;
     
     if (response.data && response.data.item) {
       // Response with item object
-      createdTask = response.data.item;
+      rawCreatedTask = response.data.item;
     } else if (response.data && response.data.data) {
       // Response with data object
-      createdTask = response.data.data;
+      rawCreatedTask = response.data.data;
     } else if (response.data && response.data.result) {
       // Response with result object
-      createdTask = response.data.result;
+      rawCreatedTask = response.data.result;
     } else if (response.data && !Array.isArray(response.data)) {
       // Direct object response
-      createdTask = response.data;
+      rawCreatedTask = response.data;
     } else {
       // If response format is unexpected, return the original task
       console.log('Unexpected creation response format, using original task');
-      createdTask = task;
+      rawCreatedTask = task;
     }
+
+    // Convert DynamoDB format to plain object if needed
+    console.log('Raw created task (before conversion):', rawCreatedTask);
+    const createdTask = convertDynamoDBItem(rawCreatedTask);
+    console.log('Converted created task:', createdTask);
 
     console.log('Task created successfully:', createdTask);
     console.log('Created task title:', createdTask.title);
     console.log('Created task assignee:', createdTask.assignee);
+    console.log('Created task project:', createdTask.project);
+    console.log('Created task description:', createdTask.description);
 
     return {
       success: true,
@@ -300,15 +307,28 @@ class ApiService {
 
   async sendTaskNotification(taskData: Task): Promise<ApiResponse<any>> {
     try {
-      console.log('Sending WhatsApp notification for task:', taskData.title);
+      console.log('=== SENDING WHATSAPP NOTIFICATION ===');
+      console.log('Full task data received:', taskData);
+      console.log('Task title:', taskData.title);
+      console.log('Task project:', taskData.project);
+      console.log('Task assignee:', taskData.assignee);
+      console.log('Task description:', taskData.description);
+      console.log('Task status:', taskData.status);
+      console.log('Task priority:', taskData.priority);
+      console.log('Task startDate:', taskData.startDate);
+      console.log('Task dueDate:', taskData.dueDate);
+      console.log('Task estimatedHours:', taskData.estimatedHours);
+      console.log('Task tags:', taskData.tags);
+      console.log('Task comments:', taskData.comments);
+      console.log('=====================================');
       
       const message = `📢 *New Task Created*\n\n` +
-        `🔹 *Task Title:* ${taskData.title}\n` +
-        `🔹 *Project:* ${taskData.project}\n` +
+        `🔹 *Task Title:* ${taskData.title || 'No Title'}\n` +
+        `🔹 *Project:* ${taskData.project || 'No Project'}\n` +
         `🔹 *Description:* ${taskData.description || 'No description provided'}\n` +
-        `🔹 *Assignee:* ${taskData.assignee}\n` +
-        `🔹 *Status:* ${taskData.status}\n` +
-        `🔹 *Priority:* ${taskData.priority}\n\n` +
+        `🔹 *Assignee:* ${taskData.assignee || 'No Assignee'}\n` +
+        `🔹 *Status:* ${taskData.status || 'To Do'}\n` +
+        `🔹 *Priority:* ${taskData.priority || 'Medium'}\n\n` +
         `📊 *Task Details*\n` +
         `- Start Date: ${formatDate(taskData.startDate)}\n` +
         `- Due Date: ${formatDate(taskData.dueDate)}\n` +
@@ -317,6 +337,8 @@ class ApiService {
         `🏷️ *Tags:* ${taskData.tags || 'No tags'}\n\n` +
         `📝 *Additional Notes:* ${taskData.comments || 'No additional notes'}\n\n` +
         `✅ Please review and start working on this task.`;
+
+      console.log('Final notification message:', message);
 
       const response = await fetch(TASK_NOTIFICATION_ENDPOINT, {
         method: 'POST',
