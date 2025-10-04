@@ -20,36 +20,51 @@ const formatDate = (dateString: string): string => {
 
 // Helper function to convert DynamoDB format to plain object
 const convertDynamoDBItem = (item: any): any => {
-  if (!item || typeof item !== 'object') return item;
+  console.log('convertDynamoDBItem - Input item:', item);
+  
+  if (!item || typeof item !== 'object') {
+    console.log('convertDynamoDBItem - Not an object, returning as-is:', item);
+    return item;
+  }
   
   const converted: any = {};
   
   for (const [key, value] of Object.entries(item)) {
+    console.log(`convertDynamoDBItem - Processing key "${key}" with value:`, value);
+    
     if (value && typeof value === 'object') {
       if ('S' in value) {
         // String value
         converted[key] = value.S;
+        console.log(`convertDynamoDBItem - Converted "${key}" from string: "${value.S}"`);
       } else if ('N' in value) {
         // Number value
         converted[key] = parseFloat(value.N);
+        console.log(`convertDynamoDBItem - Converted "${key}" from number: ${converted[key]}`);
       } else if ('BOOL' in value) {
         // Boolean value
         converted[key] = value.BOOL;
+        console.log(`convertDynamoDBItem - Converted "${key}" from boolean: ${converted[key]}`);
       } else if ('NULL' in value) {
         // Null value
         converted[key] = null;
+        console.log(`convertDynamoDBItem - Converted "${key}" from null`);
       } else if ('L' in value) {
         // List value
         converted[key] = value.L.map((item: any) => convertDynamoDBItem(item));
+        console.log(`convertDynamoDBItem - Converted "${key}" from list`);
       } else if ('M' in value) {
         // Map value
         converted[key] = convertDynamoDBItem(value.M);
+        console.log(`convertDynamoDBItem - Converted "${key}" from map`);
       }
     } else {
       converted[key] = value;
+      console.log(`convertDynamoDBItem - Kept "${key}" as-is:`, value);
     }
   }
   
+  console.log('convertDynamoDBItem - Final converted object:', converted);
   return converted;
 };
 
@@ -116,9 +131,15 @@ class ApiService {
       item: task,
     };
 
-    console.log('Creating task with data:', requestBody);
+    console.log('=== CREATING TASK ===');
+    console.log('Original taskData input:', taskData);
+    console.log('Task object being created:', task);
+    console.log('Request body being sent:', requestBody);
     console.log('Task title being sent:', task.title);
     console.log('Task assignee being sent:', task.assignee);
+    console.log('Task project being sent:', task.project);
+    console.log('Task description being sent:', task.description);
+    console.log('=====================');
 
     const response = await this.makeRequest<any>('?tableName=project-management-tasks', {
       method: 'POST',
@@ -151,9 +172,18 @@ class ApiService {
     }
 
     // Convert DynamoDB format to plain object if needed
+    console.log('=== TASK CREATION CONVERSION ===');
     console.log('Raw created task (before conversion):', rawCreatedTask);
+    console.log('Raw task title:', rawCreatedTask?.title);
+    console.log('Raw task project:', rawCreatedTask?.project);
+    console.log('Raw task assignee:', rawCreatedTask?.assignee);
+    
     const createdTask = convertDynamoDBItem(rawCreatedTask);
     console.log('Converted created task:', createdTask);
+    console.log('Converted task title:', createdTask?.title);
+    console.log('Converted task project:', createdTask?.project);
+    console.log('Converted task assignee:', createdTask?.assignee);
+    console.log('================================');
 
     console.log('Task created successfully:', createdTask);
     console.log('Created task title:', createdTask.title);
