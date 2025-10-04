@@ -87,12 +87,17 @@ const CreateTaskScreen = () => {
 
       if (response.success && response.data) {
         console.log('Task created successfully in database:', response.data);
+        console.log('Task data being added to local state:', response.data);
+        console.log('Task title in response.data:', response.data.title);
+        console.log('Task project in response.data:', response.data.project);
+        console.log('Task assignee in response.data:', response.data.assignee);
         
         // Verify the task was actually saved to the database
         const verificationResponse = await apiService.verifyTaskExists(response.data.id);
         const isVerified = verificationResponse.success && verificationResponse.data;
         
         // Add to local state as well for immediate UI update
+        console.log('Dispatching ADD_TASK with payload:', response.data);
         dispatch({ type: 'ADD_TASK', payload: response.data });
 
         // Send WhatsApp notification

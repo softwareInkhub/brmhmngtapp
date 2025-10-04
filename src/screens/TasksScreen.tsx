@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAppContext } from '../context/AppContext';
 import { apiService } from '../services/api';
 
@@ -58,8 +58,27 @@ const TasksScreen = () => {
   };
 
   useEffect(() => {
-    fetchTasks();
+    // Only fetch tasks if we don't have any tasks in state
+    // This prevents overwriting newly created tasks
+    if (tasks.length === 0) {
+      console.log('No tasks in state, fetching from API...');
+      fetchTasks();
+    } else {
+      console.log('Tasks already in state, not fetching from API');
+    }
   }, []);
+
+  // Refresh tasks when screen comes into focus (but not on initial load)
+  useFocusEffect(
+    useCallback(() => {
+      // Only refresh if we already have tasks (to sync with latest data)
+      // This handles cases where tasks were created on other screens
+      if (tasks.length > 0) {
+        console.log('Screen focused, refreshing tasks to sync with latest data...');
+        fetchTasks();
+      }
+    }, [tasks.length])
+  );
 
   const getStatusColor = (status: string) => {
     switch (status) {
