@@ -100,14 +100,38 @@ const CreateTaskScreen = () => {
         console.log('Dispatching ADD_TASK with payload:', response.data);
         dispatch({ type: 'ADD_TASK', payload: response.data });
 
-        // Send WhatsApp notification
-        console.log('Sending WhatsApp notification...');
-        const notificationResponse = await apiService.sendTaskNotification(response.data);
+        // Wait and get confirmed task data from database before sending notification
+        console.log('Waiting to get confirmed task data from database...');
+        let confirmedTaskData = response.data;
+        
+        if (isVerified && response.data.id) {
+          // Small delay to ensure database has processed the data
+          console.log('Waiting 2 seconds for database to process...');
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // Get the task data directly from database to ensure we have the real data
+          console.log('Fetching confirmed task data from database...');
+          const confirmedTaskResponse = await apiService.getTaskById(response.data.id);
+          
+          if (confirmedTaskResponse.success && confirmedTaskResponse.data) {
+            confirmedTaskData = confirmedTaskResponse.data;
+            console.log('Got confirmed task data from database:', confirmedTaskData);
+            console.log('Confirmed task title:', confirmedTaskData.title);
+            console.log('Confirmed task project:', confirmedTaskData.project);
+            console.log('Confirmed task assignee:', confirmedTaskData.assignee);
+          } else {
+            console.warn('Failed to get confirmed task data, using creation response data');
+          }
+        }
+
+        // Send WhatsApp notification with confirmed data
+        console.log('Sending WhatsApp notification with confirmed data...');
+        const notificationResponse = await apiService.sendTaskNotification(confirmedTaskData);
         
         let notificationStatus = '';
         if (notificationResponse.success) {
-          notificationStatus = '📱 WhatsApp notification sent successfully!';
-          console.log('WhatsApp notification sent successfully');
+          notificationStatus = '📱 WhatsApp notification sent with confirmed data!';
+          console.log('WhatsApp notification sent successfully with confirmed data');
         } else {
           notificationStatus = '⚠️ Task created but WhatsApp notification failed to send.';
           console.error('WhatsApp notification failed:', notificationResponse.error);
@@ -119,7 +143,7 @@ const CreateTaskScreen = () => {
 
         Alert.alert(
           'Success! ✅', 
-          `Task "${response.data.title}" has been created.\n\n${verificationMessage}\n\n${notificationStatus}\n\nTask ID: ${response.data.id}\nProject: ${response.data.project}\nAssignee: ${response.data.assignee}`,
+          `Task "${confirmedTaskData.title || response.data.title}" has been created.\n\n${verificationMessage}\n\n${notificationStatus}\n\nTask ID: ${response.data.id}\nProject: ${confirmedTaskData.project || response.data.project}\nAssignee: ${confirmedTaskData.assignee || response.data.assignee}`,
           [
             { 
               text: 'OK', 
