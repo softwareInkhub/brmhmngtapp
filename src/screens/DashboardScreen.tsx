@@ -9,9 +9,23 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useAppContext } from '../context/AppContext';
 
 const DashboardScreen = () => {
   const navigation = useNavigation();
+  const { tasks, meetings, sprints } = useAppContext();
+
+  // Calculate analytics data
+  const totalTasks = tasks.length;
+  const completedTasks = tasks.filter(task => task.status === 'Done').length;
+  const pendingTasks = tasks.filter(task => task.status !== 'Done').length;
+  
+  const todayMeetings = meetings.filter(meeting => {
+    const today = new Date().toISOString().split('T')[0];
+    return meeting.date === today;
+  }).length;
+  
+  const activeSprints = sprints.filter(sprint => sprint.status === 'active').length;
 
   const myTasks = [
     {
@@ -76,6 +90,63 @@ const DashboardScreen = () => {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Analytics Cards Section */}
+        <View style={styles.analyticsSection}>
+          <Text style={styles.sectionTitle}>Analytics</Text>
+          <View style={styles.analyticsGrid}>
+            {/* Total Tasks Card */}
+            <TouchableOpacity 
+              style={[styles.analyticsCard, styles.tasksCard]}
+              onPress={() => navigation.navigate('Tasks' as never)}
+            >
+              <View style={styles.analyticsIcon}>
+                <Ionicons name="checkmark-circle-outline" size={24} color="#137fec" />
+              </View>
+              <View style={styles.analyticsContent}>
+                <Text style={styles.analyticsNumber}>{totalTasks}</Text>
+                <Text style={styles.analyticsLabel}>Total Tasks</Text>
+                <Text style={styles.analyticsSubtext}>
+                  {completedTasks} completed, {pendingTasks} pending
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Calendar Card */}
+            <TouchableOpacity 
+              style={[styles.analyticsCard, styles.calendarCard]}
+              onPress={() => navigation.navigate('Calendar' as never)}
+            >
+              <View style={styles.analyticsIcon}>
+                <Ionicons name="calendar-outline" size={24} color="#10b981" />
+              </View>
+              <View style={styles.analyticsContent}>
+                <Text style={styles.analyticsNumber}>{todayMeetings}</Text>
+                <Text style={styles.analyticsLabel}>Today's Meetings</Text>
+                <Text style={styles.analyticsSubtext}>
+                  {meetings.length} total meetings
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Sprint Card */}
+            <TouchableOpacity 
+              style={[styles.analyticsCard, styles.sprintCard]}
+              onPress={() => navigation.navigate('Sprints' as never)}
+            >
+              <View style={styles.analyticsIcon}>
+                <Ionicons name="flag-outline" size={24} color="#f59e0b" />
+              </View>
+              <View style={styles.analyticsContent}>
+                <Text style={styles.analyticsNumber}>{activeSprints}</Text>
+                <Text style={styles.analyticsLabel}>Active Sprints</Text>
+                <Text style={styles.analyticsSubtext}>
+                  {sprints.length} total sprints
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* My Tasks Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>My Tasks</Text>
@@ -277,6 +348,69 @@ const styles = StyleSheet.create({
   activityTime: {
     fontSize: 14,
     color: '#6b7280',
+  },
+  // Analytics Cards Styles
+  analyticsSection: {
+    marginBottom: 32,
+  },
+  analyticsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  analyticsCard: {
+    flex: 1,
+    minWidth: '30%',
+    backgroundColor: 'white',
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    borderLeftWidth: 4,
+  },
+  tasksCard: {
+    borderLeftColor: '#137fec',
+  },
+  calendarCard: {
+    borderLeftColor: '#10b981',
+  },
+  sprintCard: {
+    borderLeftColor: '#f59e0b',
+  },
+  analyticsIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  analyticsContent: {
+    flex: 1,
+  },
+  analyticsNumber: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 4,
+  },
+  analyticsLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 2,
+  },
+  analyticsSubtext: {
+    fontSize: 12,
+    color: '#6b7280',
+    lineHeight: 16,
   },
 });
 
