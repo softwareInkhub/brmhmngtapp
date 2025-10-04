@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAppContext } from '../context/AppContext';
+import ProfileHeader from '../components/ProfileHeader';
 
 const TeamsScreen = () => {
   const navigation = useNavigation();
@@ -38,19 +39,23 @@ const TeamsScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={styles.headerSpacer} />
-          <Text style={styles.headerTitle}>Teams</Text>
+      {/* Profile Header */}
+      <ProfileHeader
+        title="My Teams"
+        subtitle="Team management"
+        rightElement={
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => navigation.navigate('CreateTeam' as never)}
           >
-            <Ionicons name="add-circle" size={32} color="#137fec" />
+            <Ionicons name="add" size={24} color="#137fec" />
           </TouchableOpacity>
-        </View>
-      </View>
+        }
+        onProfilePress={() => {
+          // Handle profile navigation
+        }}
+        onRightElementPress={() => navigation.navigate('CreateTeam' as never)}
+      />
 
       {/* Teams List */}
       <FlatList

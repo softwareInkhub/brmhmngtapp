@@ -9,6 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import ProfileHeader from '../components/ProfileHeader';
 
 interface Event {
   id: string;
@@ -101,17 +102,23 @@ const CalendarScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#1f2937" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Calendar</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      {/* Profile Header */}
+      <ProfileHeader
+        title="My Calendar"
+        subtitle="Schedule & meetings"
+        rightElement={
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#137fec" />
+          </TouchableOpacity>
+        }
+        onProfilePress={() => {
+          // Handle profile navigation
+        }}
+        onRightElementPress={() => navigation.goBack()}
+      />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Calendar Header */}

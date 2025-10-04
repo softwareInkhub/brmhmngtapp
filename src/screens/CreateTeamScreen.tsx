@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAppContext } from '../context/AppContext';
+import ProfileHeader from '../components/ProfileHeader';
 import { Team } from '../types';
 
 const CreateTeamScreen = () => {
@@ -54,6 +55,24 @@ const CreateTeamScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Profile Header */}
+      <ProfileHeader
+        title="Create Team"
+        subtitle="Add new team"
+        rightElement={
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="close" size={24} color="#137fec" />
+          </TouchableOpacity>
+        }
+        onProfilePress={() => {
+          // Handle profile navigation
+        }}
+        onRightElementPress={() => navigation.goBack()}
+      />
+      
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Team Name */}
         <View style={styles.inputGroup}>

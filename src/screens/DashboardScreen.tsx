@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAppContext } from '../context/AppContext';
+import ProfileHeader from '../components/ProfileHeader';
 
 const { width } = Dimensions.get('window');
 
@@ -114,20 +115,22 @@ const DashboardScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Professional Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#1f2937" />
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.buildingName}>Project Management</Text>
-          <Ionicons name="chevron-down" size={16} color="#6b7280" />
-          <Text style={styles.subtitle}>BRMH Management System</Text>
-        </View>
-        <TouchableOpacity style={styles.notificationButton}>
-          <Ionicons name="notifications-outline" size={24} color="#1f2937" />
-        </TouchableOpacity>
-      </View>
+      {/* Profile Header */}
+      <ProfileHeader
+        title="My Dashboard"
+        subtitle="Project overview"
+        rightElement={
+          <TouchableOpacity style={styles.notificationButton}>
+            <Ionicons name="notifications-outline" size={24} color="#1f2937" />
+          </TouchableOpacity>
+        }
+        onProfilePress={() => {
+          // Handle profile navigation
+        }}
+        onRightElementPress={() => {
+          // Handle notification navigation
+        }}
+      />
 
       {/* Tab Navigation */}
       <View style={styles.tabContainer}>
@@ -273,35 +276,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8fafc',
   },
-  // Header Styles
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  buildingName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 2,
-  },
-  subtitle: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 2,
-  },
+  // Notification Button
   notificationButton: {
     padding: 8,
   },

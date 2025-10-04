@@ -9,6 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import ProfileHeader from '../components/ProfileHeader';
 
 interface Sprint {
   id: string;
@@ -137,18 +138,23 @@ const SprintsScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Sprints</Text>
+      {/* Profile Header */}
+      <ProfileHeader
+        title="My Sprints"
+        subtitle="Sprint management"
+        rightElement={
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => navigation.navigate('CreateSprint' as never)}
           >
             <Ionicons name="add" size={24} color="#137fec" />
           </TouchableOpacity>
-        </View>
-      </View>
+        }
+        onProfilePress={() => {
+          // Handle profile navigation
+        }}
+        onRightElementPress={() => navigation.navigate('CreateSprint' as never)}
+      />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Sprint Overview */}

@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { Task } from '../types';
+import ProfileHeader from '../components/ProfileHeader';
 import { apiService } from '../services/api';
 
 const TaskDetailsScreen = () => {
@@ -140,19 +141,23 @@ const TaskDetailsScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#137fec" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Task Details</Text>
-        <TouchableOpacity style={styles.moreButton}>
-          <Ionicons name="ellipsis-vertical" size={24} color="#137fec" />
-        </TouchableOpacity>
-      </View>
+      {/* Profile Header */}
+      <ProfileHeader
+        title="Task Details"
+        subtitle="View task information"
+        rightElement={
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#137fec" />
+          </TouchableOpacity>
+        }
+        onProfilePress={() => {
+          // Handle profile navigation
+        }}
+        onRightElementPress={() => navigation.goBack()}
+      />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Task Info */}

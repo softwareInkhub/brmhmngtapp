@@ -15,6 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useAppContext } from '../context/AppContext';
 import { Task } from '../types';
 import { apiService } from '../services/api';
+import ProfileHeader from '../components/ProfileHeader';
 
 const CreateTaskScreen = () => {
   const navigation = useNavigation();
@@ -172,6 +173,24 @@ const CreateTaskScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Profile Header */}
+      <ProfileHeader
+        title="Create Task"
+        subtitle="Add new task"
+        rightElement={
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="close" size={24} color="#137fec" />
+          </TouchableOpacity>
+        }
+        onProfilePress={() => {
+          // Handle profile navigation
+        }}
+        onRightElementPress={() => navigation.goBack()}
+      />
+      
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Task Title */}
         <View style={styles.inputGroup}>

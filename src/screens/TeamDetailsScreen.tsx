@@ -9,6 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
+import ProfileHeader from '../components/ProfileHeader';
 
 interface TeamMember {
   id: string;
@@ -103,19 +104,22 @@ const TeamDetailsScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#1f2937" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Team Details</Text>
-        <TouchableOpacity style={styles.editButton}>
-          <Ionicons name="pencil-outline" size={24} color="#137fec" />
-        </TouchableOpacity>
-      </View>
+      {/* Profile Header */}
+      <ProfileHeader
+        title="Team Details"
+        subtitle="Team information"
+        rightElement={
+          <TouchableOpacity style={styles.editButton}>
+            <Ionicons name="pencil-outline" size={24} color="#137fec" />
+          </TouchableOpacity>
+        }
+        onProfilePress={() => {
+          // Handle profile navigation
+        }}
+        onRightElementPress={() => {
+          // Handle edit navigation
+        }}
+      />
 
       {/* Team Info */}
       <View style={styles.teamInfo}>

@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAppContext } from '../context/AppContext';
 import { apiService } from '../services/api';
+import ProfileHeader from '../components/ProfileHeader';
 
 const TasksScreen = () => {
   const navigation = useNavigation();
@@ -284,18 +285,23 @@ const TasksScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={styles.headerSpacer} />
-          <Text style={styles.headerTitle}>Tasks</Text>
+      {/* Profile Header */}
+      <ProfileHeader
+        title="My Tasks"
+        subtitle="Task management"
+        rightElement={
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => navigation.navigate('CreateTask' as never)}
           >
-            <Ionicons name="add" size={32} color="#137fec" />
+            <Ionicons name="add" size={24} color="#137fec" />
           </TouchableOpacity>
-        </View>
+        }
+        onProfilePress={() => {
+          // Handle profile navigation
+        }}
+        onRightElementPress={() => navigation.navigate('CreateTask' as never)}
+      />
         
         {/* View Mode Tabs */}
         <View style={styles.tabContainer}>
@@ -328,7 +334,6 @@ const TasksScreen = () => {
             {viewMode === 'grid' && <View style={styles.tabIndicator} />}
           </TouchableOpacity>
         </View>
-      </View>
 
         {/* Debug Info */}
         {__DEV__ && (
