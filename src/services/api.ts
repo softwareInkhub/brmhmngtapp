@@ -18,6 +18,41 @@ const formatDate = (dateString: string): string => {
   }
 };
 
+// Helper function to convert DynamoDB format to plain object
+const convertDynamoDBItem = (item: any): any => {
+  if (!item || typeof item !== 'object') return item;
+  
+  const converted: any = {};
+  
+  for (const [key, value] of Object.entries(item)) {
+    if (value && typeof value === 'object') {
+      if ('S' in value) {
+        // String value
+        converted[key] = value.S;
+      } else if ('N' in value) {
+        // Number value
+        converted[key] = parseFloat(value.N);
+      } else if ('BOOL' in value) {
+        // Boolean value
+        converted[key] = value.BOOL;
+      } else if ('NULL' in value) {
+        // Null value
+        converted[key] = null;
+      } else if ('L' in value) {
+        // List value
+        converted[key] = value.L.map((item: any) => convertDynamoDBItem(item));
+      } else if ('M' in value) {
+        // Map value
+        converted[key] = convertDynamoDBItem(value.M);
+      }
+    } else {
+      converted[key] = value;
+    }
+  }
+  
+  return converted;
+};
+
 export interface CreateTaskRequest {
   item: Task;
 }
@@ -150,20 +185,20 @@ class ApiService {
     }
 
     // Handle different possible response formats
-    let tasks: Task[] = [];
+    let rawTasks: any[] = [];
     
     if (Array.isArray(response.data)) {
       // Direct array response
-      tasks = response.data;
+      rawTasks = response.data;
     } else if (response.data && Array.isArray(response.data.items)) {
       // Response with items array
-      tasks = response.data.items;
+      rawTasks = response.data.items;
     } else if (response.data && Array.isArray(response.data.data)) {
       // Response with data array
-      tasks = response.data.data;
+      rawTasks = response.data.data;
     } else if (response.data && response.data.results && Array.isArray(response.data.results)) {
       // Response with results array
-      tasks = response.data.results;
+      rawTasks = response.data.results;
     } else {
       console.log('Unexpected response format:', response.data);
       return {
@@ -171,6 +206,16 @@ class ApiService {
         error: 'Unexpected response format from API',
       };
     }
+
+    // Convert DynamoDB format to plain objects
+    const tasks: Task[] = rawTasks.map((task: any) => {
+      console.log('Converting task from DynamoDB format:', task);
+      const convertedTask = convertDynamoDBItem(task);
+      console.log('Converted task:', convertedTask);
+      return convertedTask;
+    });
+
+    console.log('All converted tasks:', tasks);
 
     return {
       success: true,
@@ -192,24 +237,24 @@ class ApiService {
     }
 
     // Handle different possible response formats
-    let task: Task;
+    let rawTask: any;
     
     if (response.data && response.data.item) {
       // Response with item object
-      task = response.data.item;
-      console.log('API Service - Using item format, task:', task);
+      rawTask = response.data.item;
+      console.log('API Service - Using item format, raw task:', rawTask);
     } else if (response.data && response.data.data) {
       // Response with data object
-      task = response.data.data;
-      console.log('API Service - Using data format, task:', task);
+      rawTask = response.data.data;
+      console.log('API Service - Using data format, raw task:', rawTask);
     } else if (response.data && response.data.result) {
       // Response with result object
-      task = response.data.result;
-      console.log('API Service - Using result format, task:', task);
+      rawTask = response.data.result;
+      console.log('API Service - Using result format, raw task:', rawTask);
     } else if (response.data && !Array.isArray(response.data)) {
       // Direct object response
-      task = response.data;
-      console.log('API Service - Using direct format, task:', task);
+      rawTask = response.data;
+      console.log('API Service - Using direct format, raw task:', rawTask);
     } else {
       console.log('API Service - Unexpected response format for single task:', response.data);
       return {
@@ -218,9 +263,16 @@ class ApiService {
       };
     }
 
+    // Convert DynamoDB format to plain object
+    console.log('API Service - Converting DynamoDB format to plain object:', rawTask);
+    const task = convertDynamoDBItem(rawTask);
+    console.log('API Service - Converted task:', task);
+
     console.log('API Service - Final task data being returned:', task);
     console.log('API Service - Task title:', task?.title);
     console.log('API Service - Task description:', task?.description);
+    console.log('API Service - Task project:', task?.project);
+    console.log('API Service - Task assignee:', task?.assignee);
 
     return {
       success: true,
