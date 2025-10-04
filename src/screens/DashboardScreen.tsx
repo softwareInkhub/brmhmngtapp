@@ -15,17 +15,37 @@ const DashboardScreen = () => {
   const navigation = useNavigation();
   const { tasks, meetings, sprints } = useAppContext();
 
-  // Calculate analytics data
-  const totalTasks = tasks.length;
-  const completedTasks = tasks.filter(task => task.status === 'Done').length;
-  const pendingTasks = tasks.filter(task => task.status !== 'Done').length;
+  // Add safety check to ensure context data is available
+  if (!tasks || !meetings || !sprints) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <View style={styles.profileImage} />
+            <Text style={styles.headerTitle}>Dashboard</Text>
+          </View>
+          <TouchableOpacity style={styles.searchButton}>
+            <Ionicons name="search-outline" size={24} color="#6b7280" />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading dashboard...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Calculate analytics data with null checks
+  const totalTasks = tasks?.length || 0;
+  const completedTasks = tasks?.filter(task => task.status === 'Done').length || 0;
+  const pendingTasks = tasks?.filter(task => task.status !== 'Done').length || 0;
   
-  const todayMeetings = meetings.filter(meeting => {
+  const todayMeetings = meetings?.filter(meeting => {
     const today = new Date().toISOString().split('T')[0];
     return meeting.date === today;
-  }).length;
+  }).length || 0;
   
-  const activeSprints = sprints.filter(sprint => sprint.status === 'active').length;
+  const activeSprints = sprints?.filter(sprint => sprint.status === 'active').length || 0;
 
   const myTasks = [
     {
@@ -123,7 +143,7 @@ const DashboardScreen = () => {
                 <Text style={styles.analyticsNumber}>{todayMeetings}</Text>
                 <Text style={styles.analyticsLabel}>Today's Meetings</Text>
                 <Text style={styles.analyticsSubtext}>
-                  {meetings.length} total meetings
+                  {meetings?.length || 0} total meetings
                 </Text>
               </View>
             </TouchableOpacity>
@@ -140,7 +160,7 @@ const DashboardScreen = () => {
                 <Text style={styles.analyticsNumber}>{activeSprints}</Text>
                 <Text style={styles.analyticsLabel}>Active Sprints</Text>
                 <Text style={styles.analyticsSubtext}>
-                  {sprints.length} total sprints
+                  {sprints?.length || 0} total sprints
                 </Text>
               </View>
             </TouchableOpacity>
@@ -411,6 +431,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
     lineHeight: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6b7280',
   },
 });
 
