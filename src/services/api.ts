@@ -1,6 +1,22 @@
 import { Task } from '../types';
 
 const API_BASE_URL = 'https://brmh.in/crud';
+const TASK_NOTIFICATION_ENDPOINT = 'https://brmh.in/notify/11d0d0c0-9745-48bd-bbbe-9aa0c517f294';
+
+// Helper function to format dates
+const formatDate = (dateString: string): string => {
+  if (!dateString) return 'Not set';
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  } catch (error) {
+    return dateString;
+  }
+};
 
 export interface CreateTaskRequest {
   item: Task;
@@ -216,6 +232,54 @@ class ApiService {
     return this.makeRequest<void>(`?tableName=project-management-tasks&id=${taskId}`, {
       method: 'DELETE',
     });
+  }
+
+  async sendTaskNotification(taskData: Task): Promise<ApiResponse<any>> {
+    try {
+      console.log('Sending WhatsApp notification for task:', taskData.title);
+      
+      const message = `📢 *New Task Created*\n\n` +
+        `🔹 *Task Title:* ${taskData.title}\n` +
+        `🔹 *Project:* ${taskData.project}\n` +
+        `🔹 *Description:* ${taskData.description || 'No description provided'}\n` +
+        `🔹 *Assignee:* ${taskData.assignee}\n` +
+        `🔹 *Status:* ${taskData.status}\n` +
+        `🔹 *Priority:* ${taskData.priority}\n\n` +
+        `📊 *Task Details*\n` +
+        `- Start Date: ${formatDate(taskData.startDate)}\n` +
+        `- Due Date: ${formatDate(taskData.dueDate)}\n` +
+        `- Estimated Hours: ${taskData.estimatedHours || 0} hours\n` +
+        `- Progress: ${taskData.progress || 0}%\n\n` +
+        `🏷️ *Tags:* ${taskData.tags || 'No tags'}\n\n` +
+        `📝 *Additional Notes:* ${taskData.comments || 'No additional notes'}\n\n` +
+        `✅ Please review and start working on this task.`;
+
+      const response = await fetch(TASK_NOTIFICATION_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('WhatsApp notification sent successfully:', result);
+      
+      return {
+        success: true,
+        data: result,
+      };
+    } catch (error) {
+      console.error('Failed to send task notification:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to send notification',
+      };
+    }
   }
 }
 

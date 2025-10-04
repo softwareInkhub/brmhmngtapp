@@ -95,13 +95,26 @@ const CreateTaskScreen = () => {
         // Add to local state as well for immediate UI update
         dispatch({ type: 'ADD_TASK', payload: response.data });
 
+        // Send WhatsApp notification
+        console.log('Sending WhatsApp notification...');
+        const notificationResponse = await apiService.sendTaskNotification(response.data);
+        
+        let notificationStatus = '';
+        if (notificationResponse.success) {
+          notificationStatus = '📱 WhatsApp notification sent successfully!';
+          console.log('WhatsApp notification sent successfully');
+        } else {
+          notificationStatus = '⚠️ Task created but WhatsApp notification failed to send.';
+          console.error('WhatsApp notification failed:', notificationResponse.error);
+        }
+
         const verificationMessage = isVerified 
           ? '✅ Verified: Task is saved in DynamoDB database!'
           : '⚠️ Warning: Task created but verification failed. Please refresh the task list.';
 
         Alert.alert(
           'Success! ✅', 
-          `Task "${response.data.title}" has been created.\n\n${verificationMessage}\n\nTask ID: ${response.data.id}\nProject: ${response.data.project}\nAssignee: ${response.data.assignee}`,
+          `Task "${response.data.title}" has been created.\n\n${verificationMessage}\n\n${notificationStatus}\n\nTask ID: ${response.data.id}\nProject: ${response.data.project}\nAssignee: ${response.data.assignee}`,
           [
             { 
               text: 'OK', 
