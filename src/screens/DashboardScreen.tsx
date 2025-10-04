@@ -13,7 +13,8 @@ import { useAppContext } from '../context/AppContext';
 
 const DashboardScreen = () => {
   const navigation = useNavigation();
-  const { tasks, meetings, sprints } = useAppContext();
+  const { state } = useAppContext();
+  const { tasks, meetings, sprints } = state;
 
   // Add safety check to ensure context data is available
   if (!tasks || !meetings || !sprints) {
