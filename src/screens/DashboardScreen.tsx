@@ -8,12 +8,14 @@ import {
   Dimensions,
   FlatList,
   Animated,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAppContext } from '../context/AppContext';
-import ProfileHeader from '../components/ProfileHeader';
+import DashboardHeader from '../components/DashboardHeader';
+import Sidebar from '../components/Sidebar';
 
 const { width } = Dimensions.get('window');
 
@@ -27,6 +29,7 @@ const DashboardScreen = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [autoApprovalEnabled, setAutoApprovalEnabled] = useState(false);
   const [progressOverviewTab, setProgressOverviewTab] = useState('progress'); // 'progress', 'recent', or 'meetings'
+  const [sidebarVisible, setSidebarVisible] = useState(false);
   const fadeAnim = useState(new Animated.Value(0))[0];
 
   // Add safety check to ensure context data is available
@@ -687,23 +690,32 @@ const DashboardScreen = () => {
     return renderOverviewTab();
   };
 
+  const handleNotifications = () => {
+    Alert.alert(
+      'Notifications',
+      'You have 3 new notifications',
+      [{ text: 'OK' }]
+    );
+  };
+
+  const handleProfilePress = () => {
+    // Profile press can open sidebar or navigate to profile
+    setSidebarVisible(true);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* Profile Header */}
-      <ProfileHeader
-        title="My Dashboard"
-        subtitle="Project overview"
-        rightElement={
-          <TouchableOpacity style={styles.notificationButton}>
-            <Ionicons name="notifications-outline" size={24} color="#1f2937" />
-          </TouchableOpacity>
-        }
-        onProfilePress={() => {
-          // Handle profile navigation
-        }}
-        onRightElementPress={() => {
-          // Handle notification navigation
-        }}
+      {/* Sidebar */}
+      <Sidebar 
+        visible={sidebarVisible}
+        onClose={() => setSidebarVisible(false)}
+      />
+
+      {/* Dashboard Header with Hamburger Menu, Bell, and Profile */}
+      <DashboardHeader
+        onMenuPress={() => setSidebarVisible(true)}
+        onNotificationsPress={handleNotifications}
+        onProfilePress={handleProfilePress}
       />
 
       {/* Compact Tab Navigation */}

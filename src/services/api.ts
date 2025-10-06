@@ -1,7 +1,9 @@
-import { Task } from '../types';
+import { Task, User, AuthResponse } from '../types';
 
 const API_BASE_URL = 'https://brmh.in/crud';
+const AUTH_BASE_URL = 'https://brmh.in/auth';
 const TASK_NOTIFICATION_ENDPOINT = 'https://brmh.in/notify/11d0d0c0-9745-48bd-bbbe-9aa0c517f294';
+const AUTH_TABLE_NAME = 'brmh-users';
 
 // Helper function to format dates
 const formatDate = (dateString: string): string => {
@@ -15,6 +17,47 @@ const formatDate = (dateString: string): string => {
     });
   } catch (error) {
     return dateString;
+  }
+};
+
+// Helper function to decode base64 (JWT payload)
+const base64Decode = (str: string): string => {
+  try {
+    // Add padding if needed
+    const padding = '='.repeat((4 - (str.length % 4)) % 4);
+    const base64 = str.replace(/-/g, '+').replace(/_/g, '/') + padding;
+    
+    // For React Native, we can use atob if available, otherwise decode manually
+    if (typeof atob !== 'undefined') {
+      return atob(base64);
+    }
+    
+    // Manual base64 decode for environments without atob
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    let result = '';
+    let bits = 0;
+    let value = 0;
+    
+    for (let i = 0; i < base64.length; i++) {
+      const char = base64[i];
+      if (char === '=') break;
+      
+      const index = chars.indexOf(char);
+      if (index === -1) continue;
+      
+      value = (value << 6) | index;
+      bits += 6;
+      
+      if (bits >= 8) {
+        bits -= 8;
+        result += String.fromCharCode((value >> bits) & 0xFF);
+      }
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('Base64 decode error:', error);
+    throw new Error('Failed to decode base64 string');
   }
 };
 
@@ -35,15 +78,15 @@ const convertDynamoDBItem = (item: any): any => {
     if (value && typeof value === 'object') {
       if ('S' in value) {
         // String value
-        converted[key] = value.S;
-        console.log(`convertDynamoDBItem - Converted "${key}" from string: "${value.S}"`);
+        converted[key] = (value as any).S;
+        console.log(`convertDynamoDBItem - Converted "${key}" from string: "${(value as any).S}"`);
       } else if ('N' in value) {
         // Number value
-        converted[key] = parseFloat(value.N);
+        converted[key] = parseFloat((value as any).N as string);
         console.log(`convertDynamoDBItem - Converted "${key}" from number: ${converted[key]}`);
       } else if ('BOOL' in value) {
         // Boolean value
-        converted[key] = value.BOOL;
+        converted[key] = (value as any).BOOL;
         console.log(`convertDynamoDBItem - Converted "${key}" from boolean: ${converted[key]}`);
       } else if ('NULL' in value) {
         // Null value
@@ -51,11 +94,11 @@ const convertDynamoDBItem = (item: any): any => {
         console.log(`convertDynamoDBItem - Converted "${key}" from null`);
       } else if ('L' in value) {
         // List value
-        converted[key] = value.L.map((item: any) => convertDynamoDBItem(item));
+        converted[key] = ((value as any).L as any[]).map((item: any) => convertDynamoDBItem(item));
         console.log(`convertDynamoDBItem - Converted "${key}" from list`);
       } else if ('M' in value) {
         // Map value
-        converted[key] = convertDynamoDBItem(value.M);
+        converted[key] = convertDynamoDBItem((value as any).M);
         console.log(`convertDynamoDBItem - Converted "${key}" from map`);
       }
     } else {
@@ -394,6 +437,140 @@ class ApiService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to send notification',
+      };
+    }
+  }
+
+  // Authentication Methods
+  async login(email: string, password: string): Promise<AuthResponse> {
+    try {
+      console.log('=== ATTEMPTING LOGIN ===');
+      console.log('Email:', email);
+
+      const response = await fetch(`${AUTH_BASE_URL}/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: email,
+          password: password,
+        }),
+      });
+
+      const data = await response.json();
+      console.log('Login response:', data);
+
+      if (!response.ok || !data.success) {
+        return {
+          success: false,
+          error: data.error || data.message || 'Login failed',
+        };
+      }
+
+      // Extract tokens from Cognito response format
+      const idToken = data.result?.idToken?.jwtToken;
+      const accessToken = data.result?.accessToken?.jwtToken;
+      const refreshToken = data.result?.refreshToken?.token;
+
+      if (!idToken) {
+        return {
+          success: false,
+          error: 'No authentication token received',
+        };
+      }
+
+      // Decode JWT to get user information
+      const tokenParts = idToken.split('.');
+      if (tokenParts.length !== 3) {
+        return {
+          success: false,
+          error: 'Invalid token format',
+        };
+      }
+
+      const payload = JSON.parse(base64Decode(tokenParts[1]));
+      
+      // Create user object from JWT payload
+      const user: User = {
+        id: payload.sub || payload['cognito:username'],
+        email: payload.email || email,
+        name: payload.name || payload.email?.split('@')[0] || 'User',
+        role: 'member', // Default role
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      console.log('Login successful for user:', user.email);
+
+      return {
+        success: true,
+        user: user,
+        token: idToken,
+        message: 'Login successful',
+      };
+    } catch (error) {
+      console.error('Login error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Login failed',
+      };
+    }
+  }
+
+  async signup(userData: {
+    name: string;
+    email: string;
+    phone: string;
+    password: string;
+  }): Promise<AuthResponse> {
+    try {
+      console.log('=== ATTEMPTING SIGNUP ===');
+      console.log('User data:', { ...userData, password: '***' });
+
+      const response = await fetch(`${AUTH_BASE_URL}/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: userData.name,
+          email: userData.email,
+          password: userData.password,
+        }),
+      });
+
+      const data = await response.json();
+      console.log('Signup response:', data);
+
+      if (!response.ok || !data.success) {
+        return {
+          success: false,
+          error: data.error || data.message || 'Signup failed',
+        };
+      }
+
+      // After successful signup, automatically log in the user
+      console.log('Signup successful, attempting auto-login...');
+      const loginResponse = await this.login(userData.email, userData.password);
+
+      if (loginResponse.success) {
+        return {
+          ...loginResponse,
+          message: 'Account created successfully! Please check your email for verification.',
+        };
+      }
+
+      // If auto-login fails, still return success but without user/token
+      return {
+        success: true,
+        message: 'Account created successfully! Please check your email for verification, then login.',
+      };
+    } catch (error) {
+      console.error('Signup error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Signup failed',
       };
     }
   }

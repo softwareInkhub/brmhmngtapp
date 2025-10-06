@@ -1,10 +1,14 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 
 import { RootStackParamList, BottomTabParamList } from '../types';
+import { useAuth } from '../context/AuthContext';
+import LoginScreen from '../screens/LoginScreen';
+import SignupScreen from '../screens/SignupScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import TasksScreen from '../screens/TasksScreen';
 import TaskDetailsScreen from '../screens/TaskDetailsScreen';
@@ -79,6 +83,40 @@ const TabNavigator = () => {
 };
 
 const AppNavigator = () => {
+  const { isAuthenticated, isLoading, user, token } = useAuth();
+
+  // Monitor auth state changes
+  useEffect(() => {
+    console.log('🔄 [NAVIGATOR] Auth state changed!');
+    console.log('🔄 [NAVIGATOR] New state:', {
+      isAuthenticated,
+      isLoading,
+      hasUser: !!user,
+      hasToken: !!token,
+      timestamp: new Date().toISOString()
+    });
+  }, [isAuthenticated, isLoading, user, token]);
+
+  // Debug logging for navigation decisions
+  console.log('🗺️ [NAVIGATOR] Render - Current auth state:', {
+    isAuthenticated,
+    isLoading,
+    hasUser: !!user,
+    hasToken: !!token
+  });
+
+  // Show loading screen while checking authentication
+  if (isLoading) {
+    console.log('🗺️ [NAVIGATOR] Showing loading screen...');
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#137fec" />
+      </View>
+    );
+  }
+
+  console.log(`🗺️ [NAVIGATOR] Rendering ${isAuthenticated ? 'MAIN APP' : 'AUTH'} screens`);
+
   return (
     <NavigationContainer>
       <Stack.Navigator
@@ -93,46 +131,70 @@ const AppNavigator = () => {
           },
         }}
       >
-        <Stack.Screen 
-          name="Main" 
-          component={TabNavigator} 
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen 
-          name="TaskDetails" 
-          component={TaskDetailsScreen}
-          options={{ 
-            title: 'Task Details',
-            headerBackTitleVisible: false,
-          }}
-        />
-        <Stack.Screen 
-          name="TeamDetails" 
-          component={TeamDetailsScreen}
-          options={{ 
-            title: 'Team Details',
-            headerBackTitleVisible: false,
-          }}
-        />
-        <Stack.Screen 
-          name="CreateTask" 
-          component={CreateTaskScreen}
-          options={{ 
-            title: 'Create Task',
-            headerBackTitleVisible: false,
-          }}
-        />
-        <Stack.Screen 
-          name="CreateTeam" 
-          component={CreateTeamScreen}
-          options={{ 
-            title: 'Create Team',
-            headerBackTitleVisible: false,
-          }}
-        />
+        {!isAuthenticated ? (
+          // Auth Stack - Show when user is not authenticated
+          <>
+            <Stack.Screen 
+              name="Login" 
+              component={LoginScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen 
+              name="Signup" 
+              component={SignupScreen}
+              options={{ headerShown: false }}
+            />
+          </>
+        ) : (
+          // Main App Stack - Show when user is authenticated
+          <>
+            <Stack.Screen 
+              name="Main" 
+              component={TabNavigator} 
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen 
+              name="TaskDetails" 
+              component={TaskDetailsScreen}
+              options={{ 
+                title: 'Task Details',
+              }}
+            />
+            <Stack.Screen 
+              name="TeamDetails" 
+              component={TeamDetailsScreen}
+              options={{ 
+                title: 'Team Details',
+              }}
+            />
+            <Stack.Screen 
+              name="CreateTask" 
+              component={CreateTaskScreen}
+              options={{ 
+                title: 'Create Task',
+              }}
+            />
+            <Stack.Screen 
+              name="CreateTeam" 
+              component={CreateTeamScreen}
+              options={{ 
+                title: 'Create Team',
+              }}
+            />
+          </>
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );
 };
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+  },
+});
 
 export default AppNavigator;

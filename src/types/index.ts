@@ -101,7 +101,29 @@ export interface Sprint {
   updatedAt: string;
 }
 
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: 'admin' | 'manager' | 'member';
+  avatar?: string;
+  phone?: string;
+  department?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AuthResponse {
+  success: boolean;
+  user?: User;
+  token?: string;
+  message?: string;
+  error?: string;
+}
+
 export type RootStackParamList = {
+  Login: undefined;
+  Signup: undefined;
   Main: undefined;
   TaskDetails: { taskId: string };
   TeamDetails: { teamId: string };
