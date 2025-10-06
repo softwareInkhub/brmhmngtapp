@@ -26,6 +26,7 @@ const DashboardScreen = () => {
   const [userManagementTab, setUserManagementTab] = useState('Active Users');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [autoApprovalEnabled, setAutoApprovalEnabled] = useState(false);
+  const [progressOverviewTab, setProgressOverviewTab] = useState('progress'); // 'progress', 'recent', or 'meetings'
   const fadeAnim = useState(new Animated.Value(0))[0];
 
   // Add safety check to ensure context data is available
@@ -77,12 +78,18 @@ const DashboardScreen = () => {
     }).start();
   }, []);
 
+  // Handle tab switch animation
+  useEffect(() => {
+    fadeAnim.setValue(0);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [progressOverviewTab]);
+
   const tabs = [
     { id: 'Overview', label: 'Overview', icon: 'grid-outline' },
-    { id: 'Tasks', label: 'Tasks', icon: 'checkmark-circle-outline' },
-    { id: 'Meetings', label: 'Meetings', icon: 'calendar-outline' },
-    { id: 'Teams', label: 'Teams', icon: 'people-outline' },
-    { id: 'Sprints', label: 'Sprints', icon: 'speedometer-outline' },
   ];
 
   const getStatusColor = (status: string) => {
@@ -156,122 +163,264 @@ const DashboardScreen = () => {
         </View>
       </View>
 
-      {/* Progress Overview */}
-      <View style={styles.progressCard}>
-        <View style={styles.progressHeader}>
-          <View style={styles.progressTitleContainer}>
-            <View style={styles.progressIconContainer}>
-              <Ionicons name="trending-up" size={20} color="#10b981" />
-            </View>
-            <Text style={styles.progressTitle}>Progress Overview</Text>
+       {/* Progress Overview with Tabs */}
+       <View style={styles.progressCard}>
+         {/* Tab Navigation */}
+         <View style={styles.progressTabContainer}>
+           <TouchableOpacity
+             style={[styles.progressTab, progressOverviewTab === 'progress' && styles.activeProgressTab]}
+             onPress={() => setProgressOverviewTab('progress')}
+           >
+             <Ionicons 
+               name="trending-up" 
+               size={14} 
+               color={progressOverviewTab === 'progress' ? '#8b5cf6' : '#6b7280'} 
+             />
+             <Text style={[styles.progressTabText, progressOverviewTab === 'progress' && styles.activeProgressTabText]}>
+               Progress
+             </Text>
+              </TouchableOpacity>
+           
+           <TouchableOpacity
+             style={[styles.progressTab, progressOverviewTab === 'recent' && styles.activeProgressTab]}
+             onPress={() => setProgressOverviewTab('recent')}
+           >
+             <Ionicons 
+               name="time" 
+               size={14} 
+               color={progressOverviewTab === 'recent' ? '#8b5cf6' : '#6b7280'} 
+             />
+             <Text style={[styles.progressTabText, progressOverviewTab === 'recent' && styles.activeProgressTabText]}>
+               Recent
+             </Text>
+           </TouchableOpacity>
+
+           <TouchableOpacity
+             style={[styles.progressTab, progressOverviewTab === 'meetings' && styles.activeProgressTab]}
+             onPress={() => setProgressOverviewTab('meetings')}
+           >
+             <Ionicons 
+               name="calendar" 
+               size={14} 
+               color={progressOverviewTab === 'meetings' ? '#8b5cf6' : '#6b7280'} 
+             />
+             <Text style={[styles.progressTabText, progressOverviewTab === 'meetings' && styles.activeProgressTabText]}>
+               Meetings
+             </Text>
+           </TouchableOpacity>
+         </View>
+
+         {/* Tab Content */}
+         {progressOverviewTab === 'progress' && (
+           <Animated.View style={[styles.progressTabContent, { opacity: fadeAnim }]}>
+             
+             {/* Line Graph */}
+             <View style={styles.lineGraphContainer}>
+               <View style={styles.graphHeader}>
+                 <Text style={styles.graphTitle}>Progress Trend</Text>
+                 <View style={styles.graphLegend}>
+                   <View style={styles.legendItem}>
+                     <View style={[styles.legendDot, { backgroundColor: '#8b5cf6' }]} />
+                     <Text style={styles.legendText}>Tasks</Text>
+                   </View>
+                 </View>
+               </View>
+               
+               <View style={styles.lineGraph}>
+                 {/* Grid Lines */}
+                 <View style={styles.gridContainer}>
+                   {[0, 1, 2, 3, 4].map((i) => (
+                     <View key={i} style={[styles.gridLine, { left: `${i * 25}%` }]} />
+            ))}
           </View>
-          <View style={styles.progressPercentageContainer}>
-            <Text style={styles.progressPercentage}>{completionRate}%</Text>
-            <View style={styles.progressTrend}>
-              <Ionicons name="arrow-up" size={12} color="#10b981" />
-              <Text style={styles.progressTrendText}>+12%</Text>
-            </View>
-          </View>
-        </View>
-        
-        {/* Line Graph */}
-        <View style={styles.lineGraphContainer}>
-          <View style={styles.graphHeader}>
-            <Text style={styles.graphTitle}>Progress Trend</Text>
-            <View style={styles.graphLegend}>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: '#8b5cf6' }]} />
-                <Text style={styles.legendText}>Tasks</Text>
-              </View>
-            </View>
-          </View>
-          
-          <View style={styles.lineGraph}>
-            {/* Grid Lines */}
-            <View style={styles.gridContainer}>
-              {[0, 1, 2, 3, 4].map((i) => (
-                <View key={i} style={[styles.gridLine, { left: `${i * 25}%` }]} />
-              ))}
-            </View>
-            
-            {/* Line Chart */}
-            <View style={styles.chartContainer}>
-              {/* Data Points */}
-              <View style={[styles.dataPoint, { left: '0%', top: '30%' }]}>
-                <View style={styles.dataPointInner} />
-              </View>
-              <View style={[styles.dataPoint, { left: '20%', top: '20%' }]}>
-                <View style={styles.dataPointInner} />
-              </View>
-              <View style={[styles.dataPoint, { left: '40%', top: '60%' }]}>
-                <View style={styles.dataPointInner} />
-              </View>
-              <View style={[styles.dataPoint, { left: '60%', top: '10%' }]}>
-                <View style={[styles.dataPointInner, styles.dataPointHighlight]} />
-              </View>
-              <View style={[styles.dataPoint, { left: '80%', top: '40%' }]}>
-                <View style={styles.dataPointInner} />
-              </View>
-              <View style={[styles.dataPoint, { left: '100%', top: '35%' }]}>
-                <View style={styles.dataPointInner} />
-              </View>
-              
-              {/* Gradient Line */}
-              <View style={styles.gradientLine} />
-              
-              {/* Area Fill */}
-              <View style={styles.areaFill} />
-            </View>
-            
-            {/* X-axis Labels */}
-            <View style={styles.xAxisLabels}>
-              <Text style={styles.xAxisLabel}>Feb 1</Text>
-              <Text style={styles.xAxisLabel}>Feb 8</Text>
-              <Text style={[styles.xAxisLabel, styles.xAxisLabelActive]}>Feb 15</Text>
-              <Text style={styles.xAxisLabel}>Feb 22</Text>
-            </View>
-          </View>
+                 
+                 {/* Line Chart */}
+                 <View style={styles.chartContainer}>
+                   {/* Data Points */}
+                   <View style={[styles.dataPoint, { left: '0%', top: '30%' }]}>
+                     <View style={styles.dataPointInner} />
+                   </View>
+                   <View style={[styles.dataPoint, { left: '20%', top: '20%' }]}>
+                     <View style={styles.dataPointInner} />
+                   </View>
+                   <View style={[styles.dataPoint, { left: '40%', top: '60%' }]}>
+                     <View style={styles.dataPointInner} />
+                   </View>
+                   <View style={[styles.dataPoint, { left: '60%', top: '10%' }]}>
+                     <View style={[styles.dataPointInner, styles.dataPointHighlight]} />
+                   </View>
+                   <View style={[styles.dataPoint, { left: '80%', top: '40%' }]}>
+                     <View style={styles.dataPointInner} />
+                   </View>
+                   <View style={[styles.dataPoint, { left: '100%', top: '35%' }]}>
+                     <View style={styles.dataPointInner} />
         </View>
 
-        <View style={styles.progressBarContainer}>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${completionRate}%` }]} />
-          </View>
-          <Text style={styles.progressBarLabel}>{completionRate}% Complete</Text>
-        </View>
-        
-        <View style={styles.progressStatsGrid}>
-          <View style={styles.progressStatCard}>
-            <View style={[styles.statIconSmall, { backgroundColor: '#dcfce7' }]}>
-              <Ionicons name="checkmark-circle" size={16} color="#10b981" />
-            </View>
-            <View style={styles.statContentSmall}>
-              <Text style={styles.statNumberSmall}>{completedTasks}</Text>
-              <Text style={styles.statLabelSmall}>Completed</Text>
-            </View>
-          </View>
-          
-          <View style={styles.progressStatCard}>
-            <View style={[styles.statIconSmall, { backgroundColor: '#fef3c7' }]}>
-              <Ionicons name="time" size={16} color="#f59e0b" />
-            </View>
-            <View style={styles.statContentSmall}>
-              <Text style={styles.statNumberSmall}>{pendingTasks}</Text>
-              <Text style={styles.statLabelSmall}>Pending</Text>
-            </View>
-          </View>
-          
-          <View style={styles.progressStatCard}>
-            <View style={[styles.statIconSmall, { backgroundColor: '#dbeafe' }]}>
-              <Ionicons name="flame" size={16} color="#3b82f6" />
-            </View>
-            <View style={styles.statContentSmall}>
-              <Text style={styles.statNumberSmall}>{activeTasks}</Text>
-              <Text style={styles.statLabelSmall}>Active</Text>
-            </View>
-          </View>
-        </View>
-      </View>
+                   {/* Gradient Line */}
+                   <View style={styles.gradientLine} />
+                   
+                   {/* Area Fill */}
+                   <View style={styles.areaFill} />
+                      </View>
+                 
+                 {/* X-axis Labels */}
+                 <View style={styles.xAxisLabels}>
+                   <Text style={styles.xAxisLabel}>Feb 1</Text>
+                   <Text style={styles.xAxisLabel}>Feb 8</Text>
+                   <Text style={[styles.xAxisLabel, styles.xAxisLabelActive]}>Feb 15</Text>
+                   <Text style={styles.xAxisLabel}>Feb 22</Text>
+                    </View>
+               </View>
+             </View>
+
+             <View style={styles.progressBarContainer}>
+               <View style={styles.progressBar}>
+                 <View style={[styles.progressFill, { width: `${completionRate}%` }]} />
+               </View>
+               <Text style={styles.progressBarLabel}>{completionRate}% Complete</Text>
+             </View>
+             
+             <View style={styles.progressStatsGrid}>
+               <View style={styles.progressStatCard}>
+                 <View style={[styles.statIconSmall, { backgroundColor: '#dcfce7' }]}>
+                   <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+                 </View>
+                 <View style={styles.statContentSmall}>
+                   <Text style={styles.statNumberSmall}>{completedTasks}</Text>
+                   <Text style={styles.statLabelSmall}>Completed</Text>
+                 </View>
+               </View>
+               
+               <View style={styles.progressStatCard}>
+                 <View style={[styles.statIconSmall, { backgroundColor: '#fef3c7' }]}>
+                   <Ionicons name="time" size={16} color="#f59e0b" />
+                 </View>
+                 <View style={styles.statContentSmall}>
+                   <Text style={styles.statNumberSmall}>{pendingTasks}</Text>
+                   <Text style={styles.statLabelSmall}>Pending</Text>
+                 </View>
+               </View>
+               
+               <View style={styles.progressStatCard}>
+                 <View style={[styles.statIconSmall, { backgroundColor: '#dbeafe' }]}>
+                   <Ionicons name="flame" size={16} color="#3b82f6" />
+                 </View>
+                 <View style={styles.statContentSmall}>
+                   <Text style={styles.statNumberSmall}>{activeTasks}</Text>
+                   <Text style={styles.statLabelSmall}>Active</Text>
+                 </View>
+               </View>
+             </View>
+           </Animated.View>
+         )}
+
+         {progressOverviewTab === 'recent' && (
+           <Animated.View style={[styles.progressTabContent, { opacity: fadeAnim }]}>
+             {/* Recent Tasks Content */}
+             <View style={styles.recentTasksContainer}>
+               <View style={styles.recentTasksHeader}>
+                 <Text style={styles.recentTasksTitle}>Recent Tasks</Text>
+                 <Text style={styles.recentTasksSubtitle}>Latest created tasks</Text>
+               </View>
+               
+               <View style={styles.recentTasksList}>
+                 {recentTasks.length > 0 ? (
+                   recentTasks.map((task, index) => (
+                     <TouchableOpacity 
+                       key={task.id || index}
+                       style={styles.recentTaskItem}
+                       onPress={() => {
+                         navigation.navigate('TaskDetails' as any, { taskId: task.id });
+                       }}
+                     >
+                       <View style={styles.taskItemLeft}>
+                         <View style={[styles.taskStatusDot, { 
+                           backgroundColor: task.status === 'Done' ? '#10b981' : 
+                                          task.status === 'In Progress' ? '#f59e0b' : '#6b7280' 
+                         }]} />
+                         <View style={styles.taskItemContent}>
+                           <Text style={styles.taskItemTitle} numberOfLines={1}>
+                             {task.title || 'No Title'}
+                           </Text>
+                           <Text style={styles.taskItemProject} numberOfLines={1}>
+                             {task.project || 'No Project'} • {task.assignee || 'Unassigned'}
+                           </Text>
+                         </View>
+                       </View>
+                       
+                       <View style={styles.taskItemRight}>
+                         <Text style={styles.taskItemDate}>
+                           {task.createdAt ? new Date(task.createdAt).toLocaleDateString() : 'N/A'}
+                         </Text>
+                         <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
+                       </View>
+                     </TouchableOpacity>
+                   ))
+                 ) : (
+                   <View style={styles.noTasksContainer}>
+                     <Ionicons name="clipboard-outline" size={32} color="#9ca3af" />
+                     <Text style={styles.noTasksText}>No recent tasks found</Text>
+                     <Text style={styles.noTasksSubtext}>Create your first task to see it here</Text>
+                    </View>
+                  )}
+                </View>
+                </View>
+           </Animated.View>
+         )}
+
+         {progressOverviewTab === 'meetings' && (
+           <Animated.View style={[styles.progressTabContent, { opacity: fadeAnim }]}>
+             {/* Meetings Content */}
+             <View style={styles.meetingsContainer}>
+               <View style={styles.meetingsHeader}>
+                 <Text style={styles.meetingsTitle}>Upcoming Meetings</Text>
+                 <Text style={styles.meetingsSubtitle}>Scheduled meetings</Text>
+              </View>
+               
+               <View style={styles.meetingsList}>
+                 {upcomingMeetings.length > 0 ? (
+                   upcomingMeetings.map((meeting, index) => (
+                     <TouchableOpacity 
+                       key={meeting.id || index}
+                       style={styles.meetingItem}
+                       onPress={() => {
+                         navigation.navigate('Calendar' as any);
+                       }}
+                     >
+                       <View style={styles.meetingItemLeft}>
+                         <View style={styles.meetingIconContainer}>
+                           <Ionicons name="calendar" size={16} color="#8b5cf6" />
+                         </View>
+                         <View style={styles.meetingItemContent}>
+                           <Text style={styles.meetingItemTitle} numberOfLines={1}>
+                             {meeting.title || 'No Title'}
+                           </Text>
+                           <Text style={styles.meetingItemDetails} numberOfLines={1}>
+                             {meeting.date || 'No Date'} • {meeting.time || 'No Time'}
+                           </Text>
+                         </View>
+                       </View>
+                       
+                       <View style={styles.meetingItemRight}>
+                         <Text style={styles.meetingItemDuration}>
+                           {meeting.duration || '1h'}
+                         </Text>
+                         <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
+                       </View>
+                     </TouchableOpacity>
+                   ))
+                 ) : (
+                   <View style={styles.noMeetingsContainer}>
+                     <Ionicons name="calendar-outline" size={32} color="#9ca3af" />
+                     <Text style={styles.noMeetingsText}>No meetings scheduled</Text>
+                     <Text style={styles.noMeetingsSubtext}>Schedule a meeting to see it here</Text>
+                   </View>
+                 )}
+               </View>
+             </View>
+           </Animated.View>
+         )}
+       </View>
 
       {/* User Management Section */}
       <View style={styles.userManagementSection}>
@@ -321,11 +470,11 @@ const DashboardScreen = () => {
           <View style={[styles.userStatCard, { backgroundColor: '#f3e8ff' }]}>
             <View style={styles.userStatIcon}>
               <Ionicons name="people" size={20} color="#8b5cf6" />
-            </View>
+          </View>
             <View style={styles.userStatContent}>
               <Text style={styles.userStatNumber}>1250</Text>
               <Text style={styles.userStatLabel}>Total Users</Text>
-          </View>
+        </View>
         </View>
 
           <View style={[styles.userStatCard, { backgroundColor: '#f0fdf4' }]}>
@@ -527,218 +676,15 @@ const DashboardScreen = () => {
                   )}
                 </View>
 
-      {/* Quick Calendar */}
-      <View style={styles.calendarCard}>
-        <TouchableOpacity 
-          style={styles.calendarButton}
-          onPress={() => setActiveTab('Meetings')}
-        >
-          <View style={styles.calendarIcon}>
-            <Ionicons name="calendar-outline" size={32} color="#3b82f6" />
-          </View>
-          <View style={styles.calendarText}>
-            <Text style={styles.calendarTitle}>Calendar</Text>
-            <Text style={styles.calendarSubtitle}>Click to view meetings</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-        </TouchableOpacity>
-      </View>
     </Animated.View>
   );
 
-  const renderTasksTab = () => (
-    <Animated.View style={[styles.tabContent, { opacity: fadeAnim }]}>
-      {/* Active Tasks */}
-      <View style={styles.sectionCard}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="play-circle" size={20} color="#f59e0b" />
-          <Text style={styles.sectionTitle}>Active Tasks</Text>
-        </View>
-        {tasks.filter(task => task.status === 'In Progress').length > 0 ? (
-          tasks.filter(task => task.status === 'In Progress').map((item) => (
-            <TouchableOpacity 
-              key={item.id}
-              style={styles.taskItem}
-              onPress={() => navigation.navigate('TaskDetails' as never, { taskId: item.id } as never)}
-            >
-              <View style={styles.taskInfo}>
-                <Text style={styles.taskTitle} numberOfLines={1}>{item.title || 'No Title'}</Text>
-                <Text style={styles.taskProject}>{item.project || 'No Project'}</Text>
-              </View>
-              <View style={[styles.priorityDot, { backgroundColor: getPriorityColor(item.priority) }]} />
-            </TouchableOpacity>
-          ))
-        ) : (
-          <Text style={styles.emptyText}>No active tasks</Text>
-        )}
-                    </View>
 
-      {/* Recent Tasks */}
-      <View style={styles.sectionCard}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="time" size={20} color="#6b7280" />
-          <Text style={styles.sectionTitle}>Recent Tasks</Text>
-        </View>
-        {recentTasks.length > 0 ? (
-          recentTasks.map((item) => (
-            <TouchableOpacity 
-              key={item.id}
-              style={styles.taskItem}
-              onPress={() => navigation.navigate('TaskDetails' as never, { taskId: item.id } as never)}
-            >
-              <View style={styles.taskInfo}>
-                <Text style={styles.taskTitle} numberOfLines={1}>{item.title || 'No Title'}</Text>
-                <Text style={styles.taskProject}>{item.project || 'No Project'}</Text>
-              </View>
-              <View style={[styles.statusDot, { backgroundColor: getStatusColor(item.status) }]} />
-            </TouchableOpacity>
-          ))
-        ) : (
-          <Text style={styles.emptyText}>No recent tasks</Text>
-                  )}
-                </View>
-    </Animated.View>
-  );
 
-  const renderMeetingsTab = () => {
-    const todayMeetingsList = meetings.filter(meeting => {
-      const today = new Date().toISOString().split('T')[0];
-      return meeting.date === today;
-    });
 
-    return (
-      <Animated.View style={[styles.tabContent, { opacity: fadeAnim }]}>
-        {/* Today's Meetings */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="today" size={20} color="#10b981" />
-            <Text style={styles.sectionTitle}>Today's Meetings</Text>
-                </View>
-          {todayMeetingsList.length > 0 ? (
-            todayMeetingsList.map((item) => (
-              <View key={item.id} style={styles.meetingItem}>
-                <View style={styles.meetingTime}>
-                  <Text style={styles.meetingTimeText}>{item.time}</Text>
-              </View>
-                <View style={styles.meetingInfo}>
-                  <Text style={styles.meetingTitle}>{item.title}</Text>
-                  <Text style={styles.meetingLocation}>{item.location}</Text>
-          </View>
-                <Ionicons name="videocam" size={20} color="#6b7280" />
-        </View>
-            ))
-          ) : (
-            <Text style={styles.emptyText}>No meetings today</Text>
-          )}
-        </View>
-
-        {/* Upcoming Meetings */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="calendar" size={20} color="#3b82f6" />
-            <Text style={styles.sectionTitle}>Upcoming Meetings</Text>
-          </View>
-          {upcomingMeetings.length > 0 ? (
-            upcomingMeetings.map((item) => (
-              <View key={item.id} style={styles.meetingItem}>
-                <View style={styles.meetingDate}>
-                  <Text style={styles.meetingDateText}>{item.date}</Text>
-                  <Text style={styles.meetingTimeText}>{item.time}</Text>
-                </View>
-                <View style={styles.meetingInfo}>
-                  <Text style={styles.meetingTitle}>{item.title}</Text>
-                  <Text style={styles.meetingLocation}>{item.location}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-              </View>
-            ))
-          ) : (
-            <Text style={styles.emptyText}>No upcoming meetings</Text>
-          )}
-        </View>
-      </Animated.View>
-    );
-  };
-
-  const renderTeamsTab = () => (
-    <Animated.View style={[styles.tabContent, { opacity: fadeAnim }]}>
-      <View style={styles.sectionCard}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="people" size={20} color="#8b5cf6" />
-          <Text style={styles.sectionTitle}>Teams</Text>
-        </View>
-        {teams.length > 0 ? (
-          teams.map((item) => (
-            <TouchableOpacity 
-              key={item.id}
-              style={styles.teamItem}
-              onPress={() => navigation.navigate('TeamDetails' as never, { teamId: item.id } as never)}
-            >
-              <View style={styles.teamIcon}>
-                <Ionicons name="people" size={24} color="#8b5cf6" />
-              </View>
-              <View style={styles.teamInfo}>
-                <Text style={styles.teamName}>{item.name}</Text>
-                <Text style={styles.teamMembers}>{item.members.length} members</Text>
-                    </View>
-              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-            </TouchableOpacity>
-          ))
-        ) : (
-          <Text style={styles.emptyText}>No teams found</Text>
-                  )}
-                </View>
-    </Animated.View>
-  );
-
-  const renderSprintsTab = () => {
-    const activeSprintsList = sprints.filter(sprint => sprint.status === 'active');
-    
-    return (
-      <Animated.View style={[styles.tabContent, { opacity: fadeAnim }]}>
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="speedometer" size={20} color="#f59e0b" />
-            <Text style={styles.sectionTitle}>Active Sprints</Text>
-          </View>
-          {activeSprintsList.length > 0 ? (
-            activeSprintsList.map((item) => (
-              <View key={item.id} style={styles.sprintItem}>
-                <View style={styles.sprintInfo}>
-                  <Text style={styles.sprintName}>{item.name}</Text>
-                  <Text style={styles.sprintDuration}>{item.startDate} - {item.endDate}</Text>
-                </View>
-                <View style={styles.sprintProgress}>
-                  <Text style={styles.sprintProgressText}>{item.progress}%</Text>
-                  <View style={styles.sprintProgressBar}>
-                    <View style={[styles.sprintProgressFill, { width: `${item.progress}%` }]} />
-                </View>
-              </View>
-          </View>
-            ))
-          ) : (
-            <Text style={styles.emptyText}>No active sprints</Text>
-          )}
-        </View>
-      </Animated.View>
-    );
-  };
 
   const renderTabContent = () => {
-    switch (activeTab) {
-      case 'Overview':
-        return renderOverviewTab();
-      case 'Tasks':
-        return renderTasksTab();
-      case 'Meetings':
-        return renderMeetingsTab();
-      case 'Teams':
-        return renderTeamsTab();
-      case 'Sprints':
-        return renderSprintsTab();
-      default:
-        return renderOverviewTab();
-    }
+    return renderOverviewTab();
   };
 
   return (
@@ -789,6 +735,7 @@ const DashboardScreen = () => {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {renderTabContent()}
       </ScrollView>
+
     </SafeAreaView>
   );
 };
@@ -910,9 +857,46 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#f1f5f9',
   },
+  progressTabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+  },
+  progressTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  activeProgressTab: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#8b5cf6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  progressTabText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#6b7280',
+  },
+  activeProgressTabText: {
+    color: '#8b5cf6',
+    fontWeight: '600',
+  },
+  progressTabContent: {
+    flex: 1,
+  },
   progressHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     marginBottom: 16,
   },
@@ -1088,6 +1072,177 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 8,
     fontWeight: '600',
+  },
+  // Recent Tasks Styles
+  recentTasksContainer: {
+    flex: 1,
+  },
+  recentTasksHeader: {
+    marginBottom: 16,
+  },
+  recentTasksTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1f2937',
+    marginBottom: 4,
+  },
+  recentTasksSubtitle: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  recentTasksList: {
+    flex: 1,
+  },
+  recentTaskItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginVertical: 4,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  taskItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  taskStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 12,
+  },
+  taskItemContent: {
+    flex: 1,
+  },
+  taskItemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 2,
+  },
+  taskItemProject: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  taskItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  taskItemDate: {
+    fontSize: 11,
+    color: '#9ca3af',
+  },
+  noTasksContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 16,
+  },
+  noTasksText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  noTasksSubtext: {
+    fontSize: 12,
+    color: '#9ca3af',
+    textAlign: 'center',
+  },
+  // Meetings Styles
+  meetingsContainer: {
+    flex: 1,
+  },
+  meetingsHeader: {
+    marginBottom: 16,
+  },
+  meetingsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1f2937',
+    marginBottom: 4,
+  },
+  meetingsSubtitle: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  meetingsList: {
+    flex: 1,
+  },
+  meetingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginVertical: 4,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  meetingItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  meetingIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f3e8ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  meetingItemContent: {
+    flex: 1,
+  },
+  meetingItemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 2,
+  },
+  meetingItemDetails: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  meetingItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  meetingItemDuration: {
+    fontSize: 11,
+    color: '#9ca3af',
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  noMeetingsContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 16,
+  },
+  noMeetingsText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  noMeetingsSubtext: {
+    fontSize: 12,
+    color: '#9ca3af',
+    textAlign: 'center',
   },
   progressBarContainer: {
     marginBottom: 16,

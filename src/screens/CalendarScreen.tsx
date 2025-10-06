@@ -21,7 +21,7 @@ interface Event {
 const CalendarScreen = () => {
   const navigation = useNavigation();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(10);
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
   const currentMonth = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
   const currentYear = currentDate.getFullYear();
@@ -48,8 +48,6 @@ const CalendarScreen = () => {
   ];
 
   const daysOfWeek = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-  const daysInMonth = 31;
-  const firstDayOfMonth = 2; // Tuesday (0 = Sunday, 1 = Monday, etc.)
 
   const navigateMonth = (direction: 'prev' | 'next') => {
     const newDate = new Date(currentDate);
@@ -61,8 +59,40 @@ const CalendarScreen = () => {
     setCurrentDate(newDate);
   };
 
+  const getDaysInMonth = (date: Date) => {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  };
+
+  const getFirstDayOfMonth = (date: Date) => {
+    return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+  };
+
+  const isToday = (day: number) => {
+    const today = new Date();
+    return (
+      day === today.getDate() &&
+      currentDate.getMonth() === today.getMonth() &&
+      currentDate.getFullYear() === today.getFullYear()
+    );
+  };
+
+  const isSelected = (day: number) => {
+    return (
+      day === selectedDate.getDate() &&
+      currentDate.getMonth() === selectedDate.getMonth() &&
+      currentDate.getFullYear() === selectedDate.getFullYear()
+    );
+  };
+
+  const handleDateSelect = (day: number) => {
+    const newSelectedDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+    setSelectedDate(newSelectedDate);
+  };
+
   const renderCalendarGrid = () => {
     const days = [];
+    const daysInMonth = getDaysInMonth(currentDate);
+    const firstDayOfMonth = getFirstDayOfMonth(currentDate);
     
     // Add empty cells for days before the first day of the month
     for (let i = 0; i < firstDayOfMonth; i++) {
@@ -71,14 +101,24 @@ const CalendarScreen = () => {
     
     // Add day cells
     for (let day = 1; day <= daysInMonth; day++) {
-      const isSelected = day === selectedDate;
+      const isSelectedDay = isSelected(day);
+      const isTodayDate = isToday(day);
+      
       days.push(
         <TouchableOpacity
           key={day}
-          style={[styles.dayCell, isSelected && styles.selectedDay]}
-          onPress={() => setSelectedDate(day)}
+          style={[
+            styles.dayCell, 
+            isSelectedDay && styles.selectedDay,
+            isTodayDate && !isSelectedDay && styles.todayDay
+          ]}
+          onPress={() => handleDateSelect(day)}
         >
-          <Text style={[styles.dayText, isSelected && styles.selectedDayText]}>
+          <Text style={[
+            styles.dayText, 
+            isSelectedDay && styles.selectedDayText,
+            isTodayDate && !isSelectedDay && styles.todayDayText
+          ]}>
             {day}
           </Text>
         </TouchableOpacity>
@@ -157,7 +197,13 @@ const CalendarScreen = () => {
 
         {/* Selected Date Events */}
         <View style={styles.eventsSection}>
-          <Text style={styles.eventsTitle}>October {selectedDate}, 2024</Text>
+          <Text style={styles.eventsTitle}>
+            {selectedDate.toLocaleDateString('en-US', { 
+              month: 'long', 
+              day: 'numeric', 
+              year: 'numeric' 
+            })}
+          </Text>
           <View style={styles.eventsList}>
             {events.map(renderEventItem)}
           </View>
@@ -254,12 +300,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#137fec',
     borderRadius: 20,
   },
+  todayDay: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: 20,
+  },
   dayText: {
     fontSize: 16,
     color: '#1f2937',
   },
   selectedDayText: {
     color: 'white',
+    fontWeight: 'bold',
+  },
+  todayDayText: {
+    color: '#137fec',
     fontWeight: 'bold',
   },
   eventsSection: {
