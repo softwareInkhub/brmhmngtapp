@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import ProfileHeader from '../components/ProfileHeader';
+import { getClientIds, GOOGLE_SCOPES, getStoredTokens, storeTokens, clearTokens } from '../services/googleAuth';
+import * as AuthSession from 'expo-auth-session';
+import { makeRedirectUri, useAuthRequest } from 'expo-auth-session';
 
 interface Event {
   id: string;
@@ -22,6 +25,36 @@ const CalendarScreen = () => {
   const navigation = useNavigation();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [hasGoogle, setHasGoogle] = useState(false);
+
+  // OAuth request
+  const clientIds = getClientIds();
+  const redirectUri = makeRedirectUri({ useProxy: true });
+  const [request, response, promptAsync] = useAuthRequest(
+    {
+      clientId: clientIds.expo || clientIds.android || clientIds.ios,
+      scopes: GOOGLE_SCOPES,
+      redirectUri,
+      responseType: AuthSession.ResponseType.Token,
+    },
+    { authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth', tokenEndpoint: 'https://oauth2.googleapis.com/token' }
+  );
+
+  useEffect(() => {
+    (async () => {
+      const tokens = await getStoredTokens();
+      setHasGoogle(!!tokens?.accessToken);
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      if (response?.type === 'success' && response.params?.access_token) {
+        await storeTokens({ accessToken: response.params.access_token });
+        setHasGoogle(true);
+      }
+    })();
+  }, [response]);
 
   const currentMonth = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
   const currentYear = currentDate.getFullYear();
@@ -161,6 +194,17 @@ const CalendarScreen = () => {
       />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Google Connect */}
+        {!hasGoogle && (
+          <TouchableOpacity
+            style={styles.connectButton}
+            onPress={() => promptAsync()}
+            disabled={!request}
+          >
+            <Ionicons name="logo-google" size={18} color="#fff" />
+            <Text style={styles.connectText}>Connect Google Calendar</Text>
+          </TouchableOpacity>
+        )}
         {/* Calendar Header */}
         <View style={styles.calendarHeader}>
           <TouchableOpacity
@@ -373,6 +417,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  connectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#137fec',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  connectText: {
+    color: 'white',
+    fontWeight: '600',
   },
 });
 

@@ -24,6 +24,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    
+    "extra": {
+      "googleExpoClientId": "YOUR_EXPO_GO_WEB_CLIENT_ID",
+      "googleIosClientId": "YOUR_IOS_CLIENT_ID",
+      "googleAndroidClientId": "YOUR_ANDROID_CLIENT_ID"
     }
   }
 }

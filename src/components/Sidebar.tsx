@@ -60,41 +60,7 @@ const Sidebar: React.FC<SidebarProps> = ({ visible, onClose }) => {
   }, [visible]);
 
   const handleLogout = () => {
-    console.log('🔴 [SIDEBAR] Logout button pressed');
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-          onPress: () => {
-            console.log('🔴 [SIDEBAR] Logout cancelled by user');
-          },
-        },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log('🔴 [SIDEBAR] User confirmed logout');
-              console.log('🔴 [SIDEBAR] Closing sidebar...');
-              onClose();
-              
-              console.log('🔴 [SIDEBAR] Calling logout function...');
-              await logout();
-              console.log('🔴 [SIDEBAR] Logout function completed');
-              
-              // Navigation will be handled automatically by AppNavigator
-              console.log('🔴 [SIDEBAR] Waiting for AppNavigator to redirect...');
-            } catch (error) {
-              console.error('🔴 [SIDEBAR] Logout error:', error);
-              Alert.alert('Error', 'Failed to logout. Please try again.');
-            }
-          },
-        },
-      ]
-    );
+    logout();
   };
 
   const menuItems = [

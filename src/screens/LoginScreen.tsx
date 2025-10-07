@@ -66,7 +66,8 @@ const LoginScreen = () => {
       const response = await apiService.login(email, password);
 
       if (response.success && response.user && response.token) {
-        await login(response.user, response.token);
+        // Pass refresh token to login if available
+        await login(response.user, response.token, response.refreshToken);
         // Navigation will be handled by AppNavigator based on auth state
       } else {
         Alert.alert(
@@ -105,28 +106,23 @@ const LoginScreen = () => {
           {/* Logo/Brand Section */}
           <View style={styles.headerSection}>
             <View style={styles.logoContainer}>
-              <Ionicons name="briefcase" size={60} color="#137fec" />
+              <Ionicons name="briefcase" size={40} color="#137fec" />
             </View>
-            <Text style={styles.brandTitle}>BRMH MANAGEMENT</Text>
+            <Text style={styles.brandTitle}>BRMH</Text>
             <Text style={styles.brandSubtitle}>Project Management Excellence</Text>
           </View>
 
-          {/* Welcome Text */}
-          <View style={styles.welcomeSection}>
-            <Text style={styles.welcomeTitle}>Welcome Back</Text>
-            <Text style={styles.welcomeSubtitle}>Sign in to continue to your account</Text>
-          </View>
+        
 
           {/* Form Section */}
           <View style={styles.formSection}>
             {/* Email Input */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Email Address</Text>
               <View style={[styles.inputWrapper, errors.email && styles.inputError]}>
                 <Ionicons name="mail-outline" size={20} color="#6b7280" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter your email"
+                  placeholder="Username or Email *"
                   placeholderTextColor="#9ca3af"
                   value={email}
                   onChangeText={(text) => {
@@ -144,12 +140,11 @@ const LoginScreen = () => {
 
             {/* Password Input */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Password</Text>
               <View style={[styles.inputWrapper, errors.password && styles.inputError]}>
                 <Ionicons name="lock-closed-outline" size={20} color="#6b7280" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter your password"
+                  placeholder="Password *"
                   placeholderTextColor="#9ca3af"
                   value={password}
                   onChangeText={(text) => {
@@ -191,8 +186,8 @@ const LoginScreen = () => {
                 <ActivityIndicator color="#ffffff" size="small" />
               ) : (
                 <>
-                  <Text style={styles.loginButtonText}>Sign In</Text>
-                  <Ionicons name="arrow-forward" size={20} color="#ffffff" style={styles.buttonIcon} />
+                  <Text style={styles.loginButtonText}>Sign in</Text>
+                 
                 </>
               )}
             </TouchableOpacity>
@@ -208,7 +203,7 @@ const LoginScreen = () => {
             <View style={styles.signupContainer}>
               <Text style={styles.signupText}>Don't have an account? </Text>
               <TouchableOpacity onPress={handleSignupPress} disabled={isLoading}>
-                <Text style={styles.signupLink}>Sign Up</Text>
+                <Text style={styles.signupLink}>Sign up</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -247,13 +242,12 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   logoContainer: {
-    width: 100,
-    height: 100,
+    width: 70,
+    height: 70,
     borderRadius: 50,
     backgroundColor: '#eff6ff',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
     shadowColor: '#137fec',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -272,20 +266,7 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontWeight: '500',
   },
-  welcomeSection: {
-    marginBottom: 32,
-  },
-  welcomeTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 8,
-  },
-  welcomeSubtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-    lineHeight: 24,
-  },
+
   formSection: {
     marginBottom: 24,
   },
@@ -306,7 +287,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#e5e7eb',
     paddingHorizontal: 16,
-    height: 56,
+    height: 46,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -348,7 +329,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#137fec',
     borderRadius: 12,
-    height: 56,
+    height: 46,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#137fec',
@@ -418,5 +399,6 @@ const styles = StyleSheet.create({
 });
 
 export default LoginScreen;
+
 
 

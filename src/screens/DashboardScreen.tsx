@@ -14,14 +14,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAppContext } from '../context/AppContext';
+import { apiService } from '../services/api';
 import DashboardHeader from '../components/DashboardHeader';
 import Sidebar from '../components/Sidebar';
 
 const { width } = Dimensions.get('window');
 
 const DashboardScreen = () => {
-  const navigation = useNavigation();
-  const { state } = useAppContext();
+  const navigation = useNavigation() as any;
+  const { state, dispatch } = useAppContext();
   const { tasks, meetings, sprints, teams } = state;
   const [activeTab, setActiveTab] = useState('Overview');
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -31,6 +32,33 @@ const DashboardScreen = () => {
   const [progressOverviewTab, setProgressOverviewTab] = useState('progress'); // 'progress', 'recent', or 'meetings'
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const fadeAnim = useState(new Animated.Value(0))[0];
+
+  // Fetch tasks data on component mount
+  const fetchTasks = async () => {
+    try {
+      console.log('DashboardScreen - Fetching tasks...');
+      dispatch({ type: 'SET_LOADING', payload: true });
+      const response = await apiService.getTasks();
+      
+      console.log('DashboardScreen - Tasks response:', response);
+      
+      if (response.success && response.data) {
+        console.log('DashboardScreen - Tasks fetched successfully:', response.data.length, 'tasks');
+        dispatch({ type: 'SET_TASKS', payload: response.data });
+      } else {
+        console.error('DashboardScreen - Failed to fetch tasks:', response.error);
+      }
+    } catch (error) {
+      console.error('DashboardScreen - Error fetching tasks:', error);
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  };
+
+  // Load data on component mount
+  useEffect(() => {
+    fetchTasks();
+  }, []);
 
   // Add safety check to ensure context data is available
   if (!tasks || !meetings || !sprints || !teams) {
@@ -45,8 +73,8 @@ const DashboardScreen = () => {
 
   // Calculate analytics data with null checks
   const totalTasks = tasks?.length || 0;
-  const completedTasks = tasks?.filter(task => task.status === 'Done').length || 0;
-  const pendingTasks = tasks?.filter(task => task.status !== 'Done').length || 0;
+  const completedTasks = tasks?.filter(task => task.status === 'Completed').length || 0;
+  const pendingTasks = tasks?.filter(task => task.status !== 'Completed').length || 0;
   const activeTasks = tasks?.filter(task => task.status === 'In Progress').length || 0;
   
   const todayMeetings = meetings?.filter(meeting => {
@@ -97,7 +125,7 @@ const DashboardScreen = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Done':
+      case 'Completed':
         return '#10b981';
       case 'In Progress':
         return '#f59e0b';
@@ -337,8 +365,8 @@ const DashboardScreen = () => {
                        }}
                      >
                        <View style={styles.taskItemLeft}>
-                         <View style={[styles.taskStatusDot, { 
-                           backgroundColor: task.status === 'Done' ? '#10b981' : 
+                          <View style={[styles.taskStatusDot, { 
+                           backgroundColor: task.status === 'Completed' ? '#10b981' : 
                                           task.status === 'In Progress' ? '#f59e0b' : '#6b7280' 
                          }]} />
                          <View style={styles.taskItemContent}>
@@ -399,15 +427,15 @@ const DashboardScreen = () => {
                              {meeting.title || 'No Title'}
                            </Text>
                            <Text style={styles.meetingItemDetails} numberOfLines={1}>
-                             {meeting.date || 'No Date'} • {meeting.time || 'No Time'}
+                            {meeting.date || 'No Date'} • {meeting.startTime || 'No Time'}
                            </Text>
                          </View>
                        </View>
                        
                        <View style={styles.meetingItemRight}>
-                         <Text style={styles.meetingItemDuration}>
-                           {meeting.duration || '1h'}
-                         </Text>
+                          <Text style={styles.meetingItemDuration}>
+                          {meeting.startTime || '1h'}
+                          </Text>
                          <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
                        </View>
                      </TouchableOpacity>
@@ -542,9 +570,9 @@ const DashboardScreen = () => {
                 </View>
                 <View style={styles.teamInfo}>
                   <Text style={styles.teamName}>Development Team</Text>
-                  <Text style={styles.teamDetails}>8 members • Active</Text>
+                  <Text style={styles.userDetails}>8 members • Active</Text>
                 </View>
-                <TouchableOpacity style={styles.teamActionButton}>
+                <TouchableOpacity style={styles.userActionButton}>
                   <Ionicons name="chevron-forward" size={16} color="#6b7280" />
                 </TouchableOpacity>
               </View>
@@ -555,9 +583,9 @@ const DashboardScreen = () => {
                 </View>
                 <View style={styles.teamInfo}>
                   <Text style={styles.teamName}>Design Team</Text>
-                  <Text style={styles.teamDetails}>5 members • Active</Text>
+                  <Text style={styles.userDetails}>5 members • Active</Text>
                 </View>
-                <TouchableOpacity style={styles.teamActionButton}>
+                <TouchableOpacity style={styles.userActionButton}>
                   <Ionicons name="chevron-forward" size={16} color="#6b7280" />
                 </TouchableOpacity>
               </View>
@@ -604,7 +632,7 @@ const DashboardScreen = () => {
             <View style={styles.roleList}>
               <View style={styles.roleItem}>
                 <View style={[styles.roleIcon, { backgroundColor: '#fef3c7' }]}>
-                  <Ionicons name="crown" size={16} color="#f59e0b" />
+                  <Ionicons name={"crown" as any} size={16} color="#f59e0b" />
                 </View>
                 <View style={styles.roleInfo}>
                   <Text style={styles.roleName}>Admin</Text>
@@ -1362,12 +1390,12 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  sectionHeader: {
+  sectionHeaderBasic: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
   },
-  sectionTitle: {
+  sectionTitleBasic: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1f2937',
@@ -1404,45 +1432,7 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  meetingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  meetingTime: {
-    width: 60,
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  meetingTimeText: {
-    fontSize: 12,
-    color: '#6b7280',
-  },
-  meetingDate: {
-    width: 60,
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  meetingDateText: {
-    fontSize: 10,
-    color: '#6b7280',
-    marginBottom: 2,
-  },
-  meetingInfo: {
-    flex: 1,
-  },
-  meetingTitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1f2937',
-    marginBottom: 4,
-  },
-  meetingLocation: {
-    fontSize: 12,
-    color: '#6b7280',
-  },
+  
   teamItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1663,38 +1653,7 @@ const styles = StyleSheet.create({
   teamList: {
     gap: 8,
   },
-  teamItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  teamIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f3f4f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  teamInfo: {
-    flex: 1,
-  },
-  teamName: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#1f2937',
-    marginBottom: 2,
-  },
-  teamDetails: {
-    fontSize: 11,
-    color: '#6b7280',
-  },
-  teamActionButton: {
-    padding: 8,
-  },
+  
   // Settings Toggle
   settingsList: {
     gap: 12,

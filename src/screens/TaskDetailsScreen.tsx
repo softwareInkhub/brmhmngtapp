@@ -23,6 +23,19 @@ const TaskDetailsScreen = () => {
   const [newComment, setNewComment] = useState('');
   const [task, setTask] = useState<Task | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editProject, setEditProject] = useState('');
+  const [editAssignee, setEditAssignee] = useState('');
+  const [editStartDate, setEditStartDate] = useState('');
+  const [editDueDate, setEditDueDate] = useState('');
+  const [editEstimatedHours, setEditEstimatedHours] = useState('');
+  const [editTimeSpent, setEditTimeSpent] = useState('');
+  const [editStatus, setEditStatus] = useState('');
+  const [editPriority, setEditPriority] = useState('');
+  const [editProgress, setEditProgress] = useState('');
+  const [editTags, setEditTags] = useState('');
 
   const fetchTask = async () => {
     try {
@@ -57,6 +70,23 @@ const TaskDetailsScreen = () => {
   useEffect(() => {
     fetchTask();
   }, [taskId]);
+
+  useEffect(() => {
+    if (task) {
+      setEditTitle(task.title || '');
+      setEditDescription(task.description || '');
+      setEditProject(task.project || '');
+      setEditAssignee(task.assignee || '');
+      setEditStartDate(task.startDate || '');
+      setEditDueDate(task.dueDate || '');
+      setEditEstimatedHours(String(task.estimatedHours ?? ''));
+      setEditTimeSpent(task.timeSpent || '');
+      setEditStatus(task.status || '');
+      setEditPriority(task.priority || '');
+      setEditProgress(String(task.progress ?? ''));
+      setEditTags(task.tags || '');
+    }
+  }, [task]);
 
   const handleSendComment = () => {
     if (newComment.trim()) {
@@ -93,6 +123,43 @@ const TaskDetailsScreen = () => {
     }
   };
 
+  const handleToggleEdit = () => {
+    setIsEditing(prev => !prev);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!task) return;
+    try {
+      setIsLoading(true);
+      const updates: Partial<Task> = {
+        title: editTitle,
+        description: editDescription,
+        project: editProject,
+        assignee: editAssignee,
+        startDate: editStartDate,
+        dueDate: editDueDate,
+        estimatedHours: Number(editEstimatedHours) || 0,
+        timeSpent: editTimeSpent,
+        status: (editStatus as any) || task.status,
+        priority: (editPriority as any) || task.priority,
+        progress: Math.max(0, Math.min(100, Number(editProgress) || 0)),
+        tags: editTags,
+      };
+      const res = await apiService.updateTask(task.id, updates);
+      if (res.success && res.data) {
+        setTask(prev => ({ ...(prev as Task), ...res.data }));
+        setIsEditing(false);
+        Alert.alert('Success', 'Task updated successfully');
+      } else {
+        Alert.alert('Update Failed', res.error || 'Could not update task');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to update task');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -101,9 +168,7 @@ const TaskDetailsScreen = () => {
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Ionicons name="arrow-back" size={24} color="#137fec" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Task Details</Text>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#137fec" />
@@ -143,27 +208,34 @@ const TaskDetailsScreen = () => {
     <SafeAreaView style={styles.container}>
       {/* Profile Header */}
       <ProfileHeader
-        title="Task Details"
-        subtitle="View task information"
+        title={isEditing ? (editTitle || 'No Title') : (task?.title || 'No Title')}
+        subtitle={isEditing ? 'Editing task' : 'View task information'}
         rightElement={
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={isEditing ? handleSaveEdit : handleToggleEdit}
           >
-            <Ionicons name="arrow-back" size={24} color="#137fec" />
+            <Ionicons name={isEditing ? 'checkmark' : 'pencil'} size={22} color="#137fec" />
           </TouchableOpacity>
         }
         onProfilePress={() => {
           // Handle profile navigation
         }}
-        onRightElementPress={() => navigation.goBack()}
+        onRightElementPress={isEditing ? handleSaveEdit : handleToggleEdit}
       />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Task Info */}
         <View style={styles.taskInfo}>
           <View style={styles.taskHeader}>
-            <Text style={styles.taskTitle}>{task?.title || 'No Title'}</Text>
+            {isEditing ? (
+              <TextInput
+                style={styles.taskTitleInput}
+                value={editTitle}
+                onChangeText={setEditTitle}
+                placeholder="Task title"
+              />
+            ) : null}
             <View style={styles.taskMeta}>
               <View style={styles.priorityContainer}>
                 <View
@@ -192,37 +264,146 @@ const TaskDetailsScreen = () => {
             </View>
           </View>
 
-          <Text style={styles.taskDescription}>{task?.description || 'No description provided'}</Text>
+          {isEditing ? (
+            <TextInput
+              style={styles.taskDescriptionInput}
+              value={editDescription}
+              onChangeText={setEditDescription}
+              placeholder="Task description"
+              multiline
+            />
+          ) : (
+            <Text style={styles.taskDescription}>{task?.description || 'No description provided'}</Text>
+          )}
 
           {/* Task Details */}
           <View style={styles.detailsGrid}>
             <View style={styles.detailItem}>
               <Text style={styles.detailLabel}>Project</Text>
-              <Text style={styles.detailValue}>{task?.project || 'No project'}</Text>
+              {isEditing ? (
+                <TextInput
+                  style={styles.detailInput}
+                  value={editProject}
+                  onChangeText={setEditProject}
+                  placeholder="Project"
+                />
+              ) : (
+                <Text style={styles.detailValue}>{task?.project || 'No project'}</Text>
+              )}
             </View>
             <View style={styles.detailItem}>
               <Text style={styles.detailLabel}>Assignee</Text>
-              <Text style={styles.detailValue}>{task?.assignee || 'No assignee'}</Text>
+              {isEditing ? (
+                <TextInput
+                  style={styles.detailInput}
+                  value={editAssignee}
+                  onChangeText={setEditAssignee}
+                  placeholder="Assignee"
+                />
+              ) : (
+                <Text style={styles.detailValue}>{task?.assignee || 'No assignee'}</Text>
+              )}
             </View>
             <View style={styles.detailItem}>
               <Text style={styles.detailLabel}>Start Date</Text>
-              <Text style={styles.detailValue}>
-                {task?.startDate ? new Date(task.startDate).toLocaleDateString() : 'Not set'}
-              </Text>
+              {isEditing ? (
+                <TextInput
+                  style={styles.detailInput}
+                  value={editStartDate}
+                  onChangeText={setEditStartDate}
+                  placeholder="YYYY-MM-DD"
+                />
+              ) : (
+                <Text style={styles.detailValue}>
+                  {task?.startDate ? new Date(task.startDate).toLocaleDateString() : 'Not set'}
+                </Text>
+              )}
             </View>
             <View style={styles.detailItem}>
               <Text style={styles.detailLabel}>Due Date</Text>
-              <Text style={styles.detailValue}>
-                {task?.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'Not set'}
-              </Text>
+              {isEditing ? (
+                <TextInput
+                  style={styles.detailInput}
+                  value={editDueDate}
+                  onChangeText={setEditDueDate}
+                  placeholder="YYYY-MM-DD"
+                />
+              ) : (
+                <Text style={styles.detailValue}>
+                  {task?.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'Not set'}
+                </Text>
+              )}
             </View>
             <View style={styles.detailItem}>
               <Text style={styles.detailLabel}>Estimated Hours</Text>
-              <Text style={styles.detailValue}>{task?.estimatedHours || 0}h</Text>
+              {isEditing ? (
+                <TextInput
+                  style={styles.detailInput}
+                  keyboardType="numeric"
+                  value={editEstimatedHours}
+                  onChangeText={setEditEstimatedHours}
+                  placeholder="0"
+                />
+              ) : (
+                <Text style={styles.detailValue}>{task?.estimatedHours || 0}h</Text>
+              )}
             </View>
             <View style={styles.detailItem}>
               <Text style={styles.detailLabel}>Time Spent</Text>
-              <Text style={styles.detailValue}>{task?.timeSpent || '0'}h</Text>
+              {isEditing ? (
+                <TextInput
+                  style={styles.detailInput}
+                  value={editTimeSpent}
+                  onChangeText={setEditTimeSpent}
+                  placeholder="0h"
+                />
+              ) : (
+                <Text style={styles.detailValue}>{task?.timeSpent || '0'}h</Text>
+              )}
+            </View>
+          </View>
+
+          {/* Status / Priority / Progress */}
+          <View style={styles.detailsGrid}>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Status</Text>
+              {isEditing ? (
+                <TextInput
+                  style={styles.detailInput}
+                  value={editStatus}
+                  onChangeText={setEditStatus}
+                  placeholder="To Do | In Progress | Completed | Overdue"
+                />
+              ) : (
+                <Text style={styles.detailValue}>{task?.status || 'To Do'}</Text>
+              )}
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Priority</Text>
+              {isEditing ? (
+                <TextInput
+                  style={styles.detailInput}
+                  value={editPriority}
+                  onChangeText={setEditPriority}
+                  placeholder="Low | Medium | High"
+                />
+              ) : (
+                <Text style={styles.detailValue}>{task?.priority || 'Medium'}</Text>
+              )}
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Progress (%)</Text>
+              {isEditing ? (
+                <TextInput
+                  style={styles.detailInput}
+                  keyboardType="numeric"
+                  value={editProgress}
+                  onChangeText={setEditProgress}
+                  placeholder="0-100"
+                />
+              ) : (
+                <Text style={styles.detailValue}>{task?.progress || 0}%</Text>
+              )}
             </View>
           </View>
 
@@ -243,7 +424,17 @@ const TaskDetailsScreen = () => {
           </View>
 
           {/* Tags */}
-          {task?.tags && task.tags.trim() && (
+          {isEditing ? (
+            <View style={styles.tagsSection}>
+              <Text style={styles.sectionTitle}>Tags</Text>
+              <TextInput
+                style={styles.detailInput}
+                value={editTags}
+                onChangeText={setEditTags}
+                placeholder="Comma,separated,tags"
+              />
+            </View>
+          ) : task?.tags && task.tags.trim() ? (
             <View style={styles.tagsSection}>
               <Text style={styles.sectionTitle}>Tags</Text>
               <View style={styles.tagsContainer}>
@@ -254,7 +445,7 @@ const TaskDetailsScreen = () => {
                 ))}
               </View>
             </View>
-          )}
+          ) : null}
 
           {/* Comments Section */}
           <View style={styles.commentsSection}>
@@ -286,14 +477,14 @@ const TaskDetailsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f6f7f8',
+    backgroundColor:'#f6f7f8',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 5,
+    paddingVertical: 5,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
@@ -311,13 +502,13 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: 8,
   },
   taskInfo: {
     backgroundColor: 'white',
     borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
+    padding: 10,
+    marginBottom: 10,
   },
   taskHeader: {
     marginBottom: 16,
@@ -333,6 +524,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
+  },
+  taskTitleInput: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1f2937',
+    marginBottom: 12,
+    lineHeight: 32,
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   priorityContainer: {
     flexDirection: 'row',
@@ -364,6 +566,16 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginBottom: 24,
   },
+  taskDescriptionInput: {
+    fontSize: 16,
+    color: '#1f2937',
+    lineHeight: 24,
+    marginBottom: 24,
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
   detailsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -384,6 +596,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#1f2937',
+  },
+  detailInput: {
+    fontSize: 14,
+    color: '#1f2937',
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   progressSection: {
     marginBottom: 24,

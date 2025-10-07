@@ -169,23 +169,16 @@ const SignupScreen = () => {
         >
           {/* Header */}
           <View style={styles.headerSection}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-              disabled={isLoading}
-            >
-              <Ionicons name="arrow-back" size={24} color="#1f2937" />
-            </TouchableOpacity>
+          
             <View style={styles.logoContainer}>
               <Ionicons name="briefcase" size={50} color="#137fec" />
             </View>
           </View>
 
           {/* Title Section */}
-          <View style={styles.titleSection}>
+          {/* <View style={styles.titleSection}>
             <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Join BRMH Management and boost your productivity</Text>
-          </View>
+          </View> */}
 
           {/* Form Section */}
           <View style={styles.formSection}>
@@ -306,7 +299,7 @@ const SignupScreen = () => {
               {errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword}</Text>}
             </View>
 
-            {/* Password Requirements */}
+            {/* Password Requirements
             <View style={styles.requirementsContainer}>
               <Text style={styles.requirementsTitle}>Password must contain:</Text>
               <View style={styles.requirementItem}>
@@ -341,7 +334,7 @@ const SignupScreen = () => {
                 />
                 <Text style={styles.requirementText}>One number</Text>
               </View>
-            </View>
+            </View> */}
 
             {/* Sign Up Button */}
             <TouchableOpacity
@@ -438,6 +431,7 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     marginBottom: 20,
+
   },
   inputLabel: {
     fontSize: 14,
@@ -453,7 +447,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#e5e7eb',
     paddingHorizontal: 16,
-    height: 56,
+    height: 46,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -508,7 +502,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#137fec',
     borderRadius: 12,
-    height: 56,
+    height:46,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#137fec',
@@ -563,5 +557,6 @@ const styles = StyleSheet.create({
 });
 
 export default SignupScreen;
+
 
 

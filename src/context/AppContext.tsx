@@ -30,7 +30,59 @@ type AppAction =
   | { type: 'DELETE_SPRINT'; payload: string };
 
 const initialState: AppState = {
-  tasks: [], // Start with empty tasks to test API
+  tasks: [
+    {
+      id: 'task-1',
+      title: 'Setup Project Structure',
+      description: 'Initialize the project with proper folder structure and configuration',
+      status: 'Completed',
+      priority: 'High',
+      assignee: 'John Doe',
+      project: 'Project Alpha',
+      startDate: '2024-01-15',
+      dueDate: '2024-01-20',
+      estimatedHours: 8,
+      progress: 100,
+      tags: ['setup', 'configuration'],
+      comments: 'Completed successfully',
+      createdAt: '2024-01-15T09:00:00.000Z',
+      updatedAt: '2024-01-20T17:00:00.000Z',
+    },
+    {
+      id: 'task-2',
+      title: 'Implement User Authentication',
+      description: 'Create login and registration functionality',
+      status: 'In Progress',
+      priority: 'High',
+      assignee: 'Sarah Johnson',
+      project: 'Project Alpha',
+      startDate: '2024-01-20',
+      dueDate: '2024-01-25',
+      estimatedHours: 16,
+      progress: 60,
+      tags: ['auth', 'security'],
+      comments: 'Working on JWT implementation',
+      createdAt: '2024-01-20T10:00:00.000Z',
+      updatedAt: '2024-01-22T14:30:00.000Z',
+    },
+    {
+      id: 'task-3',
+      title: 'Design Dashboard UI',
+      description: 'Create wireframes and mockups for the main dashboard',
+      status: 'To Do',
+      priority: 'Medium',
+      assignee: 'Alex Chen',
+      project: 'Project Beta',
+      startDate: '2024-01-25',
+      dueDate: '2024-01-30',
+      estimatedHours: 12,
+      progress: 0,
+      tags: ['design', 'ui', 'dashboard'],
+      comments: 'Waiting for requirements',
+      createdAt: '2024-01-22T11:00:00.000Z',
+      updatedAt: '2024-01-22T11:00:00.000Z',
+    },
+  ], // Start with sample tasks for testing
   teams: [
     {
       id: '1',
@@ -91,7 +143,7 @@ const initialState: AppState = {
       id: '1',
       title: 'Team Meeting',
       description: 'Weekly team standup meeting',
-      date: '2024-01-20',
+      date: new Date().toISOString().split('T')[0], // Today's date
       startTime: '10:00',
       endTime: '11:00',
       attendees: ['member-1', 'member-2', 'member-3'],
@@ -103,7 +155,7 @@ const initialState: AppState = {
       id: '2',
       title: 'Sprint Review',
       description: 'Sprint review and planning meeting',
-      date: '2024-01-20',
+      date: new Date().toISOString().split('T')[0], // Today's date
       startTime: '13:00',
       endTime: '14:00',
       attendees: ['member-1', 'member-2', 'member-3'],

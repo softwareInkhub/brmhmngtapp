@@ -361,14 +361,26 @@ class ApiService {
   }
 
   async updateTask(taskId: string, updates: Partial<Task>): Promise<ApiResponse<Task>> {
-    const updatedTask = {
-      ...updates,
-      updatedAt: new Date().toISOString(),
+    // Clean payload: remove undefined/empty-string fields to avoid backend validation errors
+    const cleanedUpdates: any = {};
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === undefined) return;
+      if (typeof value === 'string' && value.trim() === '') return;
+      cleanedUpdates[key] = value;
+    });
+
+    // Per README_CRUD_AND_INDEX: Update body must be { key: {...}, updates: {...} }
+    const body = {
+      key: { id: taskId },
+      updates: {
+        ...cleanedUpdates,
+        updatedAt: new Date().toISOString(),
+      },
     };
 
-    return this.makeRequest<Task>(`?tableName=project-management-tasks&id=${taskId}`, {
+    return this.makeRequest<Task>(`?tableName=project-management-tasks`, {
       method: 'PUT',
-      body: JSON.stringify(updatedTask),
+      body: JSON.stringify(body),
     });
   }
 
@@ -502,11 +514,13 @@ class ApiService {
       };
 
       console.log('Login successful for user:', user.email);
+      console.log('Refresh token available:', !!refreshToken);
 
       return {
         success: true,
         user: user,
         token: idToken,
+        refreshToken: refreshToken, // Include refresh token in response
         message: 'Login successful',
       };
     } catch (error) {
@@ -571,6 +585,47 @@ class ApiService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Signup failed',
+      };
+    }
+  }
+
+  async logout(refreshToken?: string): Promise<ApiResponse<any>> {
+    try {
+      console.log('🚪 [API SERVICE] Starting backend logout...');
+      console.log('🚪 [API SERVICE] Refresh token provided:', !!refreshToken);
+
+      // Call the backend logout endpoint to clear cookies and revoke tokens
+      const response = await fetch(`${AUTH_BASE_URL}/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          refresh_token: refreshToken,
+        }),
+        credentials: 'include', // Important: Include cookies in the request
+      });
+
+      const data = await response.json();
+      console.log('🚪 [API SERVICE] Logout response:', data);
+
+      if (!response.ok) {
+        console.warn('🚪 [API SERVICE] Backend logout failed, but continuing with local logout');
+        // Don't throw error - we still want to clear local data even if backend fails
+      }
+
+      console.log('🚪 [API SERVICE] Backend logout completed');
+      return {
+        success: true,
+        data: data,
+        message: 'Logged out successfully',
+      };
+    } catch (error) {
+      console.error('🚪 [API SERVICE] Logout error:', error);
+      // Don't throw error - we still want to clear local data even if backend fails
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Logout request failed',
       };
     }
   }
