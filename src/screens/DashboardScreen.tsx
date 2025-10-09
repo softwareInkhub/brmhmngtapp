@@ -31,6 +31,8 @@ const DashboardScreen = () => {
   const [autoApprovalEnabled, setAutoApprovalEnabled] = useState(false);
   const [progressOverviewTab, setProgressOverviewTab] = useState('progress'); // 'progress', 'recent', or 'meetings'
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [users, setUsers] = useState<any[]>([]);
+  const [teamsDb, setTeamsDb] = useState<any[]>([]);
   const fadeAnim = useState(new Animated.Value(0))[0];
 
   // Fetch tasks data on component mount
@@ -55,9 +57,31 @@ const DashboardScreen = () => {
     }
   };
 
+  const fetchUsers = async () => {
+    try {
+      const res = await apiService.getUsers();
+      if (res.success && res.data) setUsers(res.data);
+    } catch {}
+  };
+
+  const fetchTeamsDb = async () => {
+    try {
+      const res = await apiService.getTeams();
+      if (res.success && res.data) {
+        const list = res.data.map((t: any) => {
+          const members = Array.isArray(t.members) ? t.members : (t.members ? JSON.parse(t.members) : []);
+          return { ...t, members, memberCount: members.length };
+        });
+        setTeamsDb(list);
+      }
+    } catch {}
+  };
+
   // Load data on component mount
   useEffect(() => {
     fetchTasks();
+    fetchUsers();
+    fetchTeamsDb();
   }, []);
 
   // Add safety check to ensure context data is available
@@ -87,7 +111,7 @@ const DashboardScreen = () => {
   // Debug logging
   console.log('DashboardScreen - Real Data Debug:');
   console.log('Total tasks:', totalTasks);
-  console.log('Active tasks:', activeTasks);
+  console.log('Pending tasks:', pendingTasks);
   console.log('Today meetings:', todayMeetings);
   console.log('Active sprints:', activeSprints);
   console.log('Tasks data:', tasks);
@@ -100,6 +124,64 @@ const DashboardScreen = () => {
   
   // Get upcoming meetings (next 3)
   const upcomingMeetings = meetings?.slice(0, 3) || [];
+
+  // Generate real task data for the progress chart (last 7 days)
+  const generateTaskProgressData = () => {
+    const dataPoints = [];
+    const today = new Date();
+    
+    try {
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        
+        // Validate date
+        if (isNaN(date.getTime())) {
+          console.warn('Invalid date generated, skipping...');
+          continue;
+        }
+        
+        const dateStr = date.toISOString().split('T')[0];
+        
+        // Count tasks created on this date with safe date parsing
+        const tasksOnDate = tasks?.filter(task => {
+          try {
+            if (!task.createdAt) return false;
+            const taskDate = new Date(task.createdAt);
+            if (isNaN(taskDate.getTime())) return false;
+            const taskDateStr = taskDate.toISOString().split('T')[0];
+            return taskDateStr === dateStr;
+          } catch (error) {
+            console.warn('Error parsing task date:', task.createdAt, error);
+            return false;
+          }
+        }).length || 0;
+        
+        // Calculate percentage position (0-100% vertically)
+        const existingCounts = dataPoints.map(d => d.count);
+        const maxTasks = Math.max(10, ...existingCounts, tasksOnDate);
+        const percentage = maxTasks > 0 ? (tasksOnDate / maxTasks) * 80 + 10 : 10; // Keep between 10-90%
+        
+        dataPoints.push({
+          date: date,
+          dateStr: dateStr,
+          count: tasksOnDate,
+          percentage: percentage,
+          label: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        });
+      }
+    } catch (error) {
+      console.error('Error generating task progress data:', error);
+      // Return fallback data
+      return [
+        { date: new Date(), dateStr: new Date().toISOString().split('T')[0], count: 0, percentage: 10, label: 'Today' }
+      ];
+    }
+    
+    return dataPoints;
+  };
+
+  const taskProgressData = generateTaskProgressData();
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -164,12 +246,12 @@ const DashboardScreen = () => {
       </View>
 
         <View style={styles.statCard}>
-          <View style={[styles.statIcon, { backgroundColor: '#10b981' }]}>
-            <Ionicons name="play-circle" size={20} color="#fff" />
+          <View style={[styles.statIcon, { backgroundColor: '#f59e0b' }]}>
+            <Ionicons name="time-outline" size={20} color="#fff" />
                 </View>
           <View style={styles.statContent}>
-            <Text style={styles.statNumber}>{activeTasks}</Text>
-            <Text style={styles.statLabel}>Active</Text>
+            <Text style={styles.statNumber}>{pendingTasks}</Text>
+            <Text style={styles.statLabel}>Pending Tasks</Text>
                 </View>
         </View>
         
@@ -238,8 +320,8 @@ const DashboardScreen = () => {
              <Text style={[styles.progressTabText, progressOverviewTab === 'meetings' && styles.activeProgressTabText]}>
                Meetings
              </Text>
-           </TouchableOpacity>
-         </View>
+        </TouchableOpacity>
+      </View>
 
          {/* Tab Content */}
          {progressOverviewTab === 'progress' && (
@@ -253,8 +335,8 @@ const DashboardScreen = () => {
                    <View style={styles.legendItem}>
                      <View style={[styles.legendDot, { backgroundColor: '#8b5cf6' }]} />
                      <Text style={styles.legendText}>Tasks</Text>
-                   </View>
-                 </View>
+                </View>
+                </View>
                </View>
                
                <View style={styles.lineGraph}>
@@ -267,39 +349,79 @@ const DashboardScreen = () => {
                  
                  {/* Line Chart */}
                  <View style={styles.chartContainer}>
-                   {/* Data Points */}
-                   <View style={[styles.dataPoint, { left: '0%', top: '30%' }]}>
-                     <View style={styles.dataPointInner} />
-                   </View>
-                   <View style={[styles.dataPoint, { left: '20%', top: '20%' }]}>
-                     <View style={styles.dataPointInner} />
-                   </View>
-                   <View style={[styles.dataPoint, { left: '40%', top: '60%' }]}>
-                     <View style={styles.dataPointInner} />
-                   </View>
-                   <View style={[styles.dataPoint, { left: '60%', top: '10%' }]}>
-                     <View style={[styles.dataPointInner, styles.dataPointHighlight]} />
-                   </View>
-                   <View style={[styles.dataPoint, { left: '80%', top: '40%' }]}>
-                     <View style={styles.dataPointInner} />
-                   </View>
-                   <View style={[styles.dataPoint, { left: '100%', top: '35%' }]}>
-                     <View style={styles.dataPointInner} />
-        </View>
+                   {/* Real Data Points */}
+                   {taskProgressData && taskProgressData.length > 0 ? taskProgressData.map((dataPoint, index) => {
+                     const isToday = index === taskProgressData.length - 1;
+                     const leftPosition = taskProgressData.length > 1 ? (index / (taskProgressData.length - 1)) * 100 : 50;
+                     
+                     return (
+                       <View key={index} style={[styles.dataPoint, { left: `${leftPosition}%`, top: `${Math.max(10, Math.min(90, 100 - dataPoint.percentage))}%` }]}>
+                         <View style={[styles.dataPointInner, isToday && styles.dataPointHighlight]} />
+                         {/* Show task count on hover/touch */}
+                         <View style={styles.dataPointTooltip}>
+                           <Text style={styles.dataPointTooltipText}>{dataPoint.count} tasks</Text>
+                         </View>
+                       </View>
+                     );
+                   }) : (
+                     // Fallback when no data
+                     <View style={[styles.dataPoint, { left: '50%', top: '50%' }]}>
+                       <View style={styles.dataPointInner} />
+                       <View style={styles.dataPointTooltip}>
+                         <Text style={styles.dataPointTooltipText}>No data</Text>
+                       </View>
+                     </View>
+                   )}
 
-                   {/* Gradient Line */}
-                   <View style={styles.gradientLine} />
+                   {/* Connect data points with lines */}
+                   {taskProgressData && taskProgressData.length > 1 && taskProgressData.map((dataPoint, index) => {
+                     if (index === taskProgressData.length - 1) return null;
+                     
+                     try {
+                       const currentLeft = (index / (taskProgressData.length - 1)) * 100;
+                       const nextLeft = ((index + 1) / (taskProgressData.length - 1)) * 100;
+                       const currentTop = Math.max(10, Math.min(90, 100 - dataPoint.percentage));
+                       const nextTop = Math.max(10, Math.min(90, 100 - taskProgressData[index + 1].percentage));
+                       
+                       const distance = Math.sqrt(Math.pow(nextLeft - currentLeft, 2) + Math.pow(nextTop - currentTop, 2));
+                       const angle = Math.atan2(nextTop - currentTop, nextLeft - currentLeft) * (180 / Math.PI);
+                       
+                       return (
+                <View
+                           key={`line-${index}`}
+                  style={[
+                             styles.chartLine,
+                             {
+                               left: `${currentLeft}%`,
+                               top: `${currentTop}%`,
+                               width: distance,
+                               transform: [{ rotate: `${angle}deg` }]
+                             }
+                           ]}
+                         />
+                       );
+                     } catch (error) {
+                       console.warn('Error rendering chart line:', error);
+                       return null;
+                     }
+                   })}
                    
                    {/* Area Fill */}
                    <View style={styles.areaFill} />
                       </View>
                  
-                 {/* X-axis Labels */}
+                 {/* X-axis Labels with Real Dates */}
                  <View style={styles.xAxisLabels}>
-                   <Text style={styles.xAxisLabel}>Feb 1</Text>
-                   <Text style={styles.xAxisLabel}>Feb 8</Text>
-                   <Text style={[styles.xAxisLabel, styles.xAxisLabelActive]}>Feb 15</Text>
-                   <Text style={styles.xAxisLabel}>Feb 22</Text>
+                   {taskProgressData && taskProgressData.length > 0 ? taskProgressData.map((dataPoint, index) => {
+                     const isToday = index === taskProgressData.length - 1;
+                     return (
+                       <Text key={index} style={[styles.xAxisLabel, isToday && styles.xAxisLabelActive]}>
+                         {dataPoint.label || 'Unknown'}
+                       </Text>
+                     );
+                   }) : (
+                     <Text style={styles.xAxisLabel}>No data</Text>
+                   )}
                     </View>
                </View>
              </View>
@@ -333,12 +455,12 @@ const DashboardScreen = () => {
                </View>
                
                <View style={styles.progressStatCard}>
-                 <View style={[styles.statIconSmall, { backgroundColor: '#dbeafe' }]}>
-                   <Ionicons name="flame" size={16} color="#3b82f6" />
+                 <View style={[styles.statIconSmall, { backgroundColor: '#fef3c7' }]}>
+                   <Ionicons name="time-outline" size={16} color="#f59e0b" />
                  </View>
                  <View style={styles.statContentSmall}>
-                   <Text style={styles.statNumberSmall}>{activeTasks}</Text>
-                   <Text style={styles.statLabelSmall}>Active</Text>
+                   <Text style={styles.statNumberSmall}>{pendingTasks}</Text>
+                   <Text style={styles.statLabelSmall}>Pending</Text>
                  </View>
                </View>
              </View>
@@ -385,16 +507,16 @@ const DashboardScreen = () => {
                          </Text>
                          <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
                        </View>
-                     </TouchableOpacity>
+              </TouchableOpacity>
                    ))
                  ) : (
                    <View style={styles.noTasksContainer}>
                      <Ionicons name="clipboard-outline" size={32} color="#9ca3af" />
                      <Text style={styles.noTasksText}>No recent tasks found</Text>
                      <Text style={styles.noTasksSubtext}>Create your first task to see it here</Text>
-                    </View>
+          </View>
                   )}
-                </View>
+        </View>
                 </View>
            </Animated.View>
          )}
@@ -406,7 +528,7 @@ const DashboardScreen = () => {
                <View style={styles.meetingsHeader}>
                  <Text style={styles.meetingsTitle}>Upcoming Meetings</Text>
                  <Text style={styles.meetingsSubtitle}>Scheduled meetings</Text>
-              </View>
+                      </View>
                
                <View style={styles.meetingsList}>
                  {upcomingMeetings.length > 0 ? (
@@ -421,7 +543,7 @@ const DashboardScreen = () => {
                        <View style={styles.meetingItemLeft}>
                          <View style={styles.meetingIconContainer}>
                            <Ionicons name="calendar" size={16} color="#8b5cf6" />
-                         </View>
+                    </View>
                          <View style={styles.meetingItemContent}>
                            <Text style={styles.meetingItemTitle} numberOfLines={1}>
                              {meeting.title || 'No Title'}
@@ -445,13 +567,13 @@ const DashboardScreen = () => {
                      <Ionicons name="calendar-outline" size={32} color="#9ca3af" />
                      <Text style={styles.noMeetingsText}>No meetings scheduled</Text>
                      <Text style={styles.noMeetingsSubtext}>Schedule a meeting to see it here</Text>
-                   </View>
-                 )}
-               </View>
-             </View>
+                    </View>
+                  )}
+                </View>
+                </View>
            </Animated.View>
          )}
-       </View>
+              </View>
 
       {/* User Management Section */}
       <View style={styles.userManagementSection}>
@@ -496,14 +618,14 @@ const DashboardScreen = () => {
             ))}
         </ScrollView>
 
-        {/* User Stats Grid - Only Two Cards */}
+        {/* User Stats Grid - Real Data */}
         <View style={styles.userStatsGrid}>
           <View style={[styles.userStatCard, { backgroundColor: '#f3e8ff' }]}>
             <View style={styles.userStatIcon}>
               <Ionicons name="people" size={20} color="#8b5cf6" />
           </View>
             <View style={styles.userStatContent}>
-              <Text style={styles.userStatNumber}>1250</Text>
+              <Text style={styles.userStatNumber}>{users.length}</Text>
               <Text style={styles.userStatLabel}>Total Users</Text>
         </View>
         </View>
@@ -513,7 +635,7 @@ const DashboardScreen = () => {
               <Ionicons name="trending-up" size={20} color="#10b981" />
                       </View>
             <View style={styles.userStatContent}>
-              <Text style={styles.userStatNumber}>180</Text>
+              <Text style={styles.userStatNumber}>{users.filter(u => { try { const d = new Date((u.lastActive || u.updatedAt || u.createdAt || '').toString()); return !isNaN(d.getTime()) && d.toISOString().split('T')[0] === new Date().toISOString().split('T')[0]; } catch { return false; }}).length}</Text>
               <Text style={styles.userStatLabel}>Active Today</Text>
                     </View>
           </View>
@@ -524,38 +646,18 @@ const DashboardScreen = () => {
           <View style={styles.userTabContent}>
             <Text style={styles.recentUsersTitle}>Active Users</Text>
             <View style={styles.userList}>
-              <View style={styles.userItem}>
-                <View style={[styles.statusDot, { backgroundColor: '#10b981' }]} />
-                <View style={styles.userInfo}>
-                  <Text style={styles.userName}>John Doe</Text>
-                  <Text style={styles.userDetails}>2 apps • 15/03/2024</Text>
+              {users.slice(0, 10).map((u, idx) => (
+                <View key={u.id || u.userId || idx} style={styles.userItem}>
+                  <View style={[styles.statusDot, { backgroundColor: u.active ? '#10b981' : '#6b7280' }]} />
+                  <View style={styles.userInfo}>
+                    <Text style={styles.userName}>{u.name || u.username || u.email || 'User'}</Text>
+                    <Text style={styles.userDetails}>{(u.appsCount ?? 0)} apps • {((u.lastActive || u.createdAt || '').toString().slice(0,10)) || '—'}</Text>
+                  </View>
+                  <TouchableOpacity style={styles.userActionButton}>
+                    <Ionicons name="ellipsis-vertical" size={16} color="#6b7280" />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity style={styles.userActionButton}>
-                  <Ionicons name="ellipsis-vertical" size={16} color="#6b7280" />
-                </TouchableOpacity>
-              </View>
-              
-              <View style={styles.userItem}>
-                <View style={[styles.statusDot, { backgroundColor: '#10b981' }]} />
-                <View style={styles.userInfo}>
-                  <Text style={styles.userName}>Jane Smith</Text>
-                  <Text style={styles.userDetails}>1 apps • 14/03/2024</Text>
-                </View>
-                <TouchableOpacity style={styles.userActionButton}>
-                  <Ionicons name="ellipsis-vertical" size={16} color="#6b7280" />
-                </TouchableOpacity>
-              </View>
-              
-              <View style={styles.userItem}>
-                <View style={[styles.statusDot, { backgroundColor: '#6b7280' }]} />
-                <View style={styles.userInfo}>
-                  <Text style={styles.userName}>Mike Johnson</Text>
-                  <Text style={styles.userDetails}>0 apps • Never</Text>
-                </View>
-                <TouchableOpacity style={styles.userActionButton}>
-                  <Ionicons name="ellipsis-vertical" size={16} color="#6b7280" />
-                </TouchableOpacity>
-              </View>
+              ))}
             </View>
           </View>
         )}
@@ -564,31 +666,20 @@ const DashboardScreen = () => {
           <View style={styles.userTabContent}>
             <Text style={styles.recentUsersTitle}>Team Management</Text>
             <View style={styles.teamList}>
-              <View style={styles.teamItem}>
-                <View style={styles.teamIcon}>
-                  <Ionicons name="business" size={20} color="#3b82f6" />
+              {teamsDb.slice(0, 6).map((t, idx) => (
+                <View key={t.id || idx} style={styles.teamItem}>
+                  <View style={styles.teamIcon}>
+                    <Ionicons name="business" size={20} color="#3b82f6" />
+                  </View>
+                  <View style={styles.teamInfo}>
+                    <Text style={styles.teamName}>{t.name || 'Untitled Team'}</Text>
+                    <Text style={styles.userDetails}>{t.memberCount} members • {String(t.startDate || '').toString().slice(0,10) || '—'}</Text>
+                  </View>
+                  <TouchableOpacity style={styles.userActionButton}>
+                    <Ionicons name="chevron-forward" size={16} color="#6b7280" />
+                  </TouchableOpacity>
                 </View>
-                <View style={styles.teamInfo}>
-                  <Text style={styles.teamName}>Development Team</Text>
-                  <Text style={styles.userDetails}>8 members • Active</Text>
-                </View>
-                <TouchableOpacity style={styles.userActionButton}>
-                  <Ionicons name="chevron-forward" size={16} color="#6b7280" />
-                </TouchableOpacity>
-              </View>
-              
-              <View style={styles.teamItem}>
-                <View style={styles.teamIcon}>
-                  <Ionicons name="business" size={20} color="#10b981" />
-                </View>
-                <View style={styles.teamInfo}>
-                  <Text style={styles.teamName}>Design Team</Text>
-                  <Text style={styles.userDetails}>5 members • Active</Text>
-                </View>
-                <TouchableOpacity style={styles.userActionButton}>
-                  <Ionicons name="chevron-forward" size={16} color="#6b7280" />
-                </TouchableOpacity>
-              </View>
+              ))}
             </View>
           </View>
         )}
@@ -1045,6 +1136,28 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     transform: [{ translateX: -4 }, { translateY: -4 }],
+  },
+  chartLine: {
+    position: 'absolute',
+    height: 2,
+    backgroundColor: '#8b5cf6',
+    transformOrigin: '0 50%',
+  },
+  dataPointTooltip: {
+    position: 'absolute',
+    bottom: 15,
+    left: -15,
+    backgroundColor: '#1f2937',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    minWidth: 40,
+    alignItems: 'center',
+  },
+  dataPointTooltipText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '500',
   },
   dataPointInner: {
     width: 8,

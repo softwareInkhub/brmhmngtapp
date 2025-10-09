@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -23,7 +23,7 @@ const DateTimePicker: any = (() => {
 })();
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAppContext } from '../context/AppContext';
 import { Task } from '../types';
 import { apiService } from '../services/api';
@@ -31,12 +31,19 @@ import ProfileHeader from '../components/ProfileHeader';
 
 const CreateTaskScreen = () => {
   const navigation = useNavigation();
-  const { dispatch } = useAppContext();
+  const route = useRoute() as any;
+  const { state, dispatch } = useAppContext();
   const [isLoading, setIsLoading] = useState(false);
   const [showPriorityMenu, setShowPriorityMenu] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const [showHourMenu, setShowHourMenu] = useState(false);
   const [showMinuteMenu, setShowMinuteMenu] = useState(false);
+  const [showParentPicker, setShowParentPicker] = useState(false);
+  const [parentSearch, setParentSearch] = useState('');
+  const [selectedParentId, setSelectedParentId] = useState<string | null>(route?.params?.parentTaskId || null);
+  const [showProjectMenu, setShowProjectMenu] = useState(false);
+  const [projectSearch, setProjectSearch] = useState('');
+  const [projects, setProjects] = useState<any[]>([]);
   const [hourValue, setHourValue] = useState<string>('0');
   const [minuteValue, setMinuteValue] = useState<string>('0');
   const [showDuePicker, setShowDuePicker] = useState(false);
@@ -80,7 +87,7 @@ const CreateTaskScreen = () => {
     setIsLoading(true);
 
     try {
-      const taskData = {
+    const taskData = {
         title: formData.title.trim(),
         description: formData.description.trim(),
         project: formData.project.trim(),
@@ -95,7 +102,7 @@ const CreateTaskScreen = () => {
         comments: '0',
         progress: 0,
         timeSpent: '0',
-        parentId: null,
+        parentId: selectedParentId,
       };
 
       console.log('Form data being sent:', {
@@ -121,6 +128,45 @@ const CreateTaskScreen = () => {
         // Add to local state as well for immediate UI update
         console.log('Dispatching ADD_TASK with payload:', response.data);
         dispatch({ type: 'ADD_TASK', payload: response.data });
+
+        // If this is a subtask, update the parent's subtasks array
+        if (selectedParentId) {
+          try {
+            console.log('Updating parent task subtasks list...');
+            const parentRes = await apiService.getTaskById(selectedParentId);
+            if (parentRes.success && parentRes.data) {
+              const parent = parentRes.data;
+              let subtasksArray: string[] = [];
+              
+              // Parse existing subtasks
+              try {
+                if (parent.subtasks && typeof parent.subtasks === 'string') {
+                  subtasksArray = JSON.parse(parent.subtasks);
+                } else if (Array.isArray(parent.subtasks)) {
+                  subtasksArray = parent.subtasks;
+                }
+              } catch (e) {
+                console.warn('Failed to parse parent subtasks, starting fresh:', e);
+                subtasksArray = [];
+              }
+              
+              // Add new subtask ID if not already present
+              if (!subtasksArray.includes(response.data.id)) {
+                subtasksArray.push(response.data.id);
+                console.log('Updated subtasks array:', subtasksArray);
+                
+                // Update parent task
+                await apiService.updateTask(selectedParentId, { 
+                  subtasks: JSON.stringify(subtasksArray) 
+                } as any);
+                console.log('Parent task subtasks updated successfully');
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to update parent task subtasks:', e);
+            // Don't fail the task creation if parent update fails
+          }
+        }
 
         // Wait and get confirmed task data from database before sending notification
         console.log('Waiting to get confirmed task data from database...');
@@ -192,6 +238,22 @@ const CreateTaskScreen = () => {
     }
   };
 
+  // Fetch projects for dropdown
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const res = await apiService.getProjects();
+      if (mounted && res.success && res.data) {
+        try {
+          setProjects(res.data as any[]);
+        } catch {
+          setProjects([]);
+        }
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Profile Header */}
@@ -221,6 +283,27 @@ const CreateTaskScreen = () => {
             value={formData.title}
             onChangeText={(value) => handleInputChange('title', value)}
           />
+        </View>
+
+        {/* Parent Task (Optional) */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Parent Task (optional)</Text>
+          <TouchableOpacity
+            style={[styles.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+            activeOpacity={0.8}
+            onPress={() => setShowParentPicker(true)}
+          >
+            <Text style={styles.inputText} numberOfLines={1}>
+              {selectedParentId ? (state.tasks.find(t => t.id === selectedParentId)?.title || selectedParentId) : 'Select parent task'}
+            </Text>
+            {selectedParentId ? (
+              <TouchableOpacity onPress={() => setSelectedParentId(null)}>
+                <Ionicons name="close-circle" size={18} color="#6b7280" />
+              </TouchableOpacity>
+            ) : (
+              <Ionicons name="chevron-down" size={18} color="#6b7280" />
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* Description */}
@@ -413,14 +496,55 @@ const CreateTaskScreen = () => {
         </View>
 
         {/* Project */}
-        <View style={styles.inputGroup}>
+        <View style={[styles.inputGroup, styles.dropdownWrapper]}>
           <Text style={styles.label}>Project *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter project name"
-            value={formData.project}
-            onChangeText={(value) => handleInputChange('project', value)}
-          />
+          <View style={styles.dropdownContainer}>
+            <TouchableOpacity
+              style={styles.select}
+              onPress={() => setShowProjectMenu(!showProjectMenu)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.selectText} numberOfLines={1}>{formData.project || 'Select project'}</Text>
+              <Ionicons name={showProjectMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
+            </TouchableOpacity>
+            {showProjectMenu && (
+              <View style={[styles.selectMenu, { zIndex: 4000, elevation: 24, maxHeight: 280, position: 'absolute' }]}> 
+                <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: 'white' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+                    <Ionicons name="search" size={14} color="#9ca3af" />
+                    <TextInput
+                      value={projectSearch}
+                      onChangeText={setProjectSearch}
+                      placeholder="Search projects"
+                      placeholderTextColor="#9ca3af"
+                      style={{ marginLeft: 6, flex: 1, color: '#111827', paddingVertical: 0 }}
+                    />
+                  </View>
+                </View>
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled
+                  style={{ maxHeight: 220 }}
+                  contentContainerStyle={{ paddingBottom: 8 }}
+                >
+                  {(projects || [])
+                    .filter(p => !projectSearch.trim() || (p.name || p.title || '').toLowerCase().includes(projectSearch.toLowerCase()))
+                    .map((item, idx) => (
+                      <TouchableOpacity
+                        key={item.id || item.projectId || item.name || String(idx)}
+                        style={styles.selectOption}
+                        onPress={() => {
+                          handleInputChange('project', item.name || item.title || '');
+                          setShowProjectMenu(false);
+                        }}
+                      >
+                        <Text style={styles.selectOptionText} numberOfLines={1}>{item.name || item.title || '-'}</Text>
+                      </TouchableOpacity>
+                    ))}
+                </ScrollView>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* Assigned To + Status (Row) */}
@@ -505,6 +629,54 @@ const CreateTaskScreen = () => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Parent Picker Modal (simple sheet) */}
+      {showParentPicker && (
+        <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowParentPicker(false)} />
+          <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 12, borderTopRightRadius: 12, maxHeight: 420 }}>
+            <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#111827' }}>Select Parent Task</Text>
+              <TouchableOpacity onPress={() => setShowParentPicker(false)}>
+                <Ionicons name="close" size={20} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <View style={{ paddingHorizontal: 12, paddingTop: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+                <Ionicons name="search" size={16} color="#9ca3af" />
+                <TextInput
+                  value={parentSearch}
+                  onChangeText={setParentSearch}
+                  placeholder="Search tasks..."
+                  placeholderTextColor="#9ca3af"
+                  style={{ marginLeft: 6, flex: 1, color: '#111827' }}
+                />
+              </View>
+            </View>
+            <ScrollView style={{ paddingHorizontal: 12, marginTop: 8 }}>
+              {state.tasks
+                .filter(t => !t.parentId) // show only top-level by default to avoid clutter
+                .filter(t => !parentSearch.trim() || (t.title || '').toLowerCase().includes(parentSearch.toLowerCase()))
+                .map(t => (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' }}
+                    onPress={() => {
+                      setSelectedParentId(t.id);
+                      setShowParentPicker(false);
+                    }}
+                  >
+                    <Text style={{ fontSize: 14, color: '#111827' }} numberOfLines={1}>{t.title || 'Untitled'}</Text>
+                    <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{t.project || 'No Project'} • {t.assignee || 'Unassigned'}</Text>
+                  </TouchableOpacity>
+                ))}
+              {state.tasks.length === 0 && (
+                <Text style={{ paddingVertical: 16, textAlign: 'center', color: '#6b7280' }}>No tasks available</Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 };

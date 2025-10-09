@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -15,7 +15,10 @@ import TaskDetailsScreen from '../screens/TaskDetailsScreen';
 import TeamsScreen from '../screens/TeamsScreen';
 import TeamDetailsScreen from '../screens/TeamDetailsScreen';
 import CalendarScreen from '../screens/CalendarScreen';
-import SprintsScreen from '../screens/SprintsScreen';
+// import SprintsScreen from '../screens/SprintsScreen';
+import ProjectsScreen from '../screens/ProjectsScreen';
+import CreateProjectScreen from '../screens/CreateProjectScreen';
+import ProjectDetailsScreen from '../screens/ProjectDetailsScreen';
 import CreateTaskScreen from '../screens/CreateTaskScreen';
 import CreateTeamScreen from '../screens/CreateTeamScreen';
 
@@ -31,16 +34,27 @@ const TabNavigator = () => {
 
           if (route.name === 'Dashboard') {
             iconName = focused ? 'grid' : 'grid-outline';
-          } else if (route.name === 'Tasks') {
-            iconName = focused ? 'checkmark-circle' : 'checkmark-circle-outline';
+          } else           if (route.name === 'Tasks') {
+            iconName = 'clipboard';
           } else if (route.name === 'Teams') {
             iconName = focused ? 'people' : 'people-outline';
           } else if (route.name === 'Calendar') {
             iconName = focused ? 'calendar' : 'calendar-outline';
-          } else if (route.name === 'Sprints') {
-            iconName = focused ? 'flag' : 'flag-outline';
+          } else if (route.name === 'Projects') {
+            iconName = focused ? 'briefcase' : 'briefcase-outline';
           } else {
             iconName = 'ellipse-outline';
+          }
+
+          // Special styling for Tasks tab
+          if (route.name === 'Tasks') {
+            return (
+              <View style={styles.tasksTabContainer}>
+                <View style={[styles.tasksTabGradient, { backgroundColor: focused ? '#0ea5e9' : '#6b7280' }]}>
+                  <Ionicons name={iconName} size={24} color="#ffffff" />
+                </View>
+              </View>
+            );
           }
 
           return <Ionicons name={iconName} size={24} color={color} />;
@@ -74,10 +88,10 @@ const TabNavigator = () => {
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen name="Projects" component={ProjectsScreen} />
       <Tab.Screen name="Tasks" component={TasksScreen} />
       <Tab.Screen name="Teams" component={TeamsScreen} />
       <Tab.Screen name="Calendar" component={CalendarScreen} />
-      <Tab.Screen name="Sprints" component={SprintsScreen} />
     </Tab.Navigator>
   );
 };
@@ -181,6 +195,20 @@ const AppNavigator = () => {
                 title: 'Create Team',
               }}
             />
+          <Stack.Screen 
+            name="CreateProject" 
+            component={CreateProjectScreen}
+            options={{ 
+              title: 'Create Project',
+            }}
+          />
+          <Stack.Screen 
+            name="ProjectDetails" 
+            component={ProjectDetailsScreen}
+            options={{ 
+              title: 'Project Details',
+            }}
+          />
           </>
         )}
       </Stack.Navigator>
@@ -194,6 +222,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f9fafb',
+  },
+  tasksTabContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: -16,
+    marginBottom: 8,
+    shadowColor: '#0ea5e9',
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  tasksTabGradient: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#ffffff',
   },
 });
 

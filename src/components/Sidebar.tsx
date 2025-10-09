@@ -68,7 +68,7 @@ const Sidebar: React.FC<SidebarProps> = ({ visible, onClose }) => {
     { id: 'tasks', icon: 'checkmark-circle-outline', label: 'Tasks', badge: null },
     { id: 'teams', icon: 'people-outline', label: 'Teams', badge: null },
     { id: 'calendar', icon: 'calendar-outline', label: 'Calendar', badge: null },
-    { id: 'sprints', icon: 'flag-outline', label: 'Sprints', badge: null },
+    { id: 'projects', icon: 'briefcase-outline', label: 'Projects', badge: null },
   ];
 
   const settingsItems = [

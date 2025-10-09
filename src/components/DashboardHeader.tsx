@@ -12,12 +12,16 @@ interface DashboardHeaderProps {
   onMenuPress: () => void;
   onNotificationsPress?: () => void;
   onProfilePress?: () => void;
+  title?: string;
+  subtitle?: string;
 }
 
 const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   onMenuPress,
   onNotificationsPress,
   onProfilePress,
+  title,
+  subtitle,
 }) => {
   const { user } = useAuth();
 
@@ -36,8 +40,8 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
 
       {/* Center: Title */}
       <View style={styles.centerContainer}>
-        <Text style={styles.title}>Dashboard</Text>
-        <Text style={styles.subtitle}>Welcome back!</Text>
+        <Text style={styles.title}>{title || 'Dashboard'}</Text>
+        <Text style={styles.subtitle}>{subtitle || 'Welcome back!'}</Text>
       </View>
 
       {/* Right: Notification Bell and Profile */}

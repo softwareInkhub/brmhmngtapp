@@ -132,6 +132,7 @@ class ApiService {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
           ...options.headers,
         },
         ...options,
@@ -140,7 +141,9 @@ class ApiService {
       console.log('Response status:', response.status);
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        let errorText = '';
+        try { errorText = await response.text(); } catch {}
+        throw new Error(`HTTP error! status: ${response.status}${errorText ? ` - ${errorText}` : ''}`);
       }
 
       const data = await response.json();
@@ -360,7 +363,148 @@ class ApiService {
     };
   }
 
+  // Projects APIs
+  async getProjects(): Promise<ApiResponse<any[]>> {
+    const response = await this.makeRequest<any>('?tableName=project-management-projects', {
+      method: 'GET',
+    });
+
+    if (!response.success) return response;
+
+    let rawProjects: any[] = [];
+    if (Array.isArray(response.data)) rawProjects = response.data;
+    else if (response.data && Array.isArray(response.data.items)) rawProjects = response.data.items;
+    else if (response.data && Array.isArray(response.data.data)) rawProjects = response.data.data;
+    else if (response.data && response.data.results && Array.isArray(response.data.results)) rawProjects = response.data.results;
+    else return { success: false, error: 'Unexpected response format from API' };
+
+    const projects = rawProjects.map((p: any) => convertDynamoDBItem(p));
+    return { success: true, data: projects };
+  }
+
+  async getProjectById(projectId: string): Promise<ApiResponse<any>> {
+    const response = await this.makeRequest<any>(`?tableName=project-management-projects&id=${projectId}`, {
+      method: 'GET',
+    });
+
+    if (!response.success) return response;
+
+    let raw: any;
+    if (response.data && response.data.item) raw = response.data.item;
+    else if (response.data && response.data.data) raw = response.data.data;
+    else if (response.data && response.data.result) raw = response.data.result;
+    else if (response.data && !Array.isArray(response.data)) raw = response.data;
+    else return { success: false, error: 'Unexpected response format from API' };
+
+    return { success: true, data: convertDynamoDBItem(raw) };
+  }
+
+  async createProject(project: any): Promise<ApiResponse<any>> {
+    // Ensure required fields and defaults
+    const now = new Date().toISOString();
+    const projectId = project.id || `project-${Date.now()}`;
+    const payload = {
+      item: {
+        id: projectId,
+        name: project.name,
+        description: project.description || '',
+        company: project.company,
+        status: String(project.status || 'Planning'),
+        priority: String(project.priority || 'Medium'),
+        startDate: project.startDate,
+        endDate: project.endDate,
+        budget: String(project.budget),
+        team: project.team,
+        assignee: project.assignee,
+        progress: typeof project.progress === 'number' ? project.progress : 0,
+        tasks: typeof project.tasks === 'string' ? project.tasks : JSON.stringify(project.tasks || []),
+        tags: typeof project.tags === 'string' ? project.tags : JSON.stringify(project.tags || []),
+        notes: project.notes || '',
+        createdAt: now,
+        updatedAt: now,
+      },
+    };
+
+    const response = await this.makeRequest<any>('?tableName=project-management-projects', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.success) return response;
+
+    // Normalize response
+    const data = response.data as any;
+    const raw = data?.item || data?.data || data?.result || data;
+    return { success: true, data: convertDynamoDBItem(raw) };
+  }
+
+  async updateProject(projectId: string, updates: Partial<any>): Promise<ApiResponse<any>> {
+    // Clean payload
+    const cleanedUpdates: any = {};
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === undefined) return;
+      if (typeof value === 'string' && value.trim() === '') return;
+      cleanedUpdates[key] = value;
+    });
+
+    // Never allow updating key/managed attributes
+    delete cleanedUpdates.id;
+    delete cleanedUpdates.projectId;
+    delete cleanedUpdates.createdAt;
+    delete cleanedUpdates.timestamp;
+    // Allow updatedAt to be regenerated below
+    delete cleanedUpdates.updatedAt;
+
+    // Normalize fields for BRMH CRUD/Dynamo
+    if (cleanedUpdates.status !== undefined) cleanedUpdates.status = String(cleanedUpdates.status);
+    if (cleanedUpdates.priority !== undefined) cleanedUpdates.priority = String(cleanedUpdates.priority);
+    if (cleanedUpdates.progress !== undefined) cleanedUpdates.progress = Math.max(0, Math.min(100, Number(cleanedUpdates.progress) || 0));
+    if (cleanedUpdates.budget !== undefined) cleanedUpdates.budget = String(cleanedUpdates.budget);
+    if (cleanedUpdates.tasks !== undefined) cleanedUpdates.tasks = typeof cleanedUpdates.tasks === 'string' ? cleanedUpdates.tasks : JSON.stringify(cleanedUpdates.tasks || []);
+    if (cleanedUpdates.tags !== undefined) cleanedUpdates.tags = typeof cleanedUpdates.tags === 'string' ? cleanedUpdates.tags : JSON.stringify(cleanedUpdates.tags || []);
+
+    const body = {
+      key: { id: projectId },
+      updates: {
+        ...cleanedUpdates,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+
+    const response = await this.makeRequest<any>(`?tableName=project-management-projects`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+
+    if (!response.success) return response;
+
+    // BRMH CRUD may return just status; if item present, normalize, else echo updates + id
+    const data = response.data as any;
+    const raw = data?.item || data?.data || data?.result || null;
+    if (raw) {
+      return { success: true, data: convertDynamoDBItem(raw) };
+    }
+    return { success: true, data: { id: projectId, ...cleanedUpdates } as any };
+  }
+
+  async deleteProject(projectId: string): Promise<ApiResponse<void>> {
+    try {
+      const deleteBody = { key: { id: projectId } } as any;
+      const response = await this.makeRequest<void>(`?tableName=project-management-projects`, {
+        method: 'DELETE',
+        body: JSON.stringify(deleteBody),
+      });
+      return response;
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Delete failed' };
+    }
+  }
+
   async updateTask(taskId: string, updates: Partial<Task>): Promise<ApiResponse<Task>> {
+    console.log('=== UPDATING TASK ===');
+    console.log('Task ID to update:', taskId);
+    console.log('Updates to apply:', updates);
+    
     // Clean payload: remove undefined/empty-string fields to avoid backend validation errors
     const cleanedUpdates: any = {};
     Object.entries(updates).forEach(([key, value]) => {
@@ -378,16 +522,77 @@ class ApiService {
       },
     };
 
-    return this.makeRequest<Task>(`?tableName=project-management-tasks`, {
+    console.log('Update request body:', body);
+
+    const response = await this.makeRequest<any>(`?tableName=project-management-tasks`, {
       method: 'PUT',
       body: JSON.stringify(body),
     });
+
+    console.log('Update response:', response);
+
+    if (!response.success) {
+      console.error('Update failed:', response.error);
+      return response;
+    }
+
+    // Handle different possible response formats
+    let rawUpdatedTask: any;
+    if (response.data && response.data.item) {
+      rawUpdatedTask = response.data.item;
+    } else if (response.data && response.data.data) {
+      rawUpdatedTask = response.data.data;
+    } else if (response.data && response.data.result) {
+      rawUpdatedTask = response.data.result;
+    } else if (response.data && !Array.isArray(response.data)) {
+      rawUpdatedTask = response.data;
+    } else {
+      console.error('Unexpected response format:', response.data);
+      return {
+        success: false,
+        error: 'Unexpected response format from server',
+      };
+    }
+
+    console.log('Raw updated task:', rawUpdatedTask);
+    
+    // Convert DynamoDB item to Task format
+    const updatedTask = convertDynamoDBItem(rawUpdatedTask);
+    console.log('Converted updated task:', updatedTask);
+
+    return {
+      success: true,
+      data: updatedTask,
+    };
   }
 
   async deleteTask(taskId: string): Promise<ApiResponse<void>> {
-    return this.makeRequest<void>(`?tableName=project-management-tasks&id=${taskId}`, {
-      method: 'DELETE',
-    });
+    console.log('=== DELETING TASK ===');
+    console.log('Task ID to delete:', taskId);
+    console.log('Full delete URL:', `${API_BASE_URL}?tableName=project-management-tasks`);
+    
+    try {
+      // According to BRMH CRUD API documentation, DELETE should include the item data in body
+      const deleteBody = {
+        id: taskId
+      };
+      
+      console.log('Delete request body:', deleteBody);
+      
+      const response = await this.makeRequest<void>(`?tableName=project-management-tasks`, {
+        method: 'DELETE',
+        body: JSON.stringify(deleteBody),
+      });
+      
+      console.log('Delete response:', response);
+      return response;
+    } catch (error) {
+      console.error('Delete task error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
   }
 
   async sendTaskNotification(taskData: Task): Promise<ApiResponse<any>> {
@@ -454,10 +659,10 @@ class ApiService {
   }
 
   // Authentication Methods
-  async login(email: string, password: string): Promise<AuthResponse> {
+  async login(usernameOrEmail: string, password: string): Promise<AuthResponse> {
     try {
       console.log('=== ATTEMPTING LOGIN ===');
-      console.log('Email:', email);
+      console.log('Username/Email:', usernameOrEmail);
 
       const response = await fetch(`${AUTH_BASE_URL}/login`, {
         method: 'POST',
@@ -465,7 +670,7 @@ class ApiService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          username: email,
+          username: usernameOrEmail,
           password: password,
         }),
       });
@@ -506,7 +711,7 @@ class ApiService {
       // Create user object from JWT payload
       const user: User = {
         id: payload.sub || payload['cognito:username'],
-        email: payload.email || email,
+        email: payload.email || usernameOrEmail,
         name: payload.name || payload.email?.split('@')[0] || 'User',
         role: 'member', // Default role
         createdAt: new Date().toISOString(),
@@ -532,9 +737,159 @@ class ApiService {
     }
   }
 
+  // Users listing from DynamoDB (brmh-users)
+  async getUsers(): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await this.makeRequest<any>(`?tableName=${AUTH_TABLE_NAME}`, { method: 'GET' });
+      if (!response.success) return response;
+
+      let raw: any[] = [];
+      if (Array.isArray(response.data)) raw = response.data;
+      else if (response.data?.items) raw = response.data.items;
+      else if (response.data?.data) raw = response.data.data;
+      else if (response.data?.results) raw = response.data.results;
+
+      const users = raw.map((u: any) => convertDynamoDBItem(u));
+      return { success: true, data: users };
+    } catch (e) {
+      return { success: false, error: 'Failed to fetch users' };
+    }
+  }
+
+  async updateUser(userId: string, updates: Partial<any>): Promise<ApiResponse<any>> {
+    // sanitize updates
+    const cleaned: any = {};
+    Object.entries(updates).forEach(([k, v]) => {
+      if (v === undefined) return;
+      if (typeof v === 'string' && v.trim() === '') return;
+      cleaned[k] = v;
+    });
+    delete cleaned.id; delete cleaned.userId; delete cleaned.createdAt; delete cleaned.timestamp; delete cleaned.updatedAt;
+
+    const body = {
+      key: { id: userId },
+      updates: { ...cleaned, updatedAt: new Date().toISOString() },
+    };
+
+    const res = await this.makeRequest<any>(`?tableName=${AUTH_TABLE_NAME}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+    if (!res.success) return res;
+    const data = (res.data as any);
+    const raw = data?.item || data?.data || data?.result || null;
+    if (raw) return { success: true, data: convertDynamoDBItem(raw) };
+    return { success: true, data: { id: userId, ...cleaned } };
+  }
+
+  async deleteUser(userId: string): Promise<ApiResponse<void>> {
+    const body = { key: { id: userId } } as any;
+    return this.makeRequest<void>(`?tableName=${AUTH_TABLE_NAME}`, {
+      method: 'DELETE',
+      body: JSON.stringify(body),
+    });
+  }
+
+  // Teams API
+  async createTeam(team: any): Promise<ApiResponse<any>> {
+    const now = new Date().toISOString();
+    const teamId = team.id || `team-${Date.now()}`;
+    const payload = {
+      item: {
+        id: teamId,
+        name: team.name,
+        description: team.description || '',
+        members: typeof team.members === 'string' ? team.members : JSON.stringify(team.members || []),
+        project: team.project || '',
+        tasksCompleted: Number(team.tasksCompleted ?? 0),
+        totalTasks: Number(team.totalTasks ?? 0),
+        performance: Number(team.performance ?? 85),
+        velocity: Number(team.velocity ?? 80),
+        health: String(team.health || 'good'),
+        budget: String(team.budget || ''),
+        startDate: team.startDate || '',
+        archived: Boolean(team.archived ?? false),
+        tags: typeof team.tags === 'string' ? team.tags : JSON.stringify(team.tags || []),
+        achievements: typeof team.achievements === 'string' ? team.achievements : JSON.stringify(team.achievements || []),
+        lastActivity: team.lastActivity || 'Just now',
+        department: team.department || '',
+        manager: team.manager || '',
+        whatsappGroupId: team.whatsappGroupId || '',
+        whatsappGroupName: team.whatsappGroupName || '',
+        goals: team.goals || '',
+        notes: team.notes || '',
+        createdAt: now,
+        updatedAt: now,
+      }
+    };
+
+    const response = await this.makeRequest<any>('?tableName=project-management-teams', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.success) return response;
+    const data = response.data as any;
+    const raw = data?.item || data?.data || data?.result || data;
+    return { success: true, data: convertDynamoDBItem(raw) };
+  }
+
+  async getTeams(): Promise<ApiResponse<any[]>> {
+    const response = await this.makeRequest<any>('?tableName=project-management-teams', {
+      method: 'GET',
+    });
+
+    if (!response.success) return response;
+
+    let rawTeams: any[] = [];
+    if (Array.isArray(response.data)) rawTeams = response.data;
+    else if (response.data && Array.isArray(response.data.items)) rawTeams = response.data.items;
+    else if (response.data && Array.isArray(response.data.data)) rawTeams = response.data.data;
+    else if (response.data && response.data.results && Array.isArray(response.data.results)) rawTeams = response.data.results;
+    else return { success: false, error: 'Unexpected response format from API' };
+
+    const teams = rawTeams.map((t: any) => convertDynamoDBItem(t));
+    return { success: true, data: teams };
+  }
+
+  async updateTeam(teamId: string, updates: Partial<any>): Promise<ApiResponse<any>> {
+    const cleaned: any = {};
+    Object.entries(updates).forEach(([k, v]) => {
+      if (v === undefined) return;
+      if (typeof v === 'string' && v.trim() === '') return;
+      cleaned[k] = v;
+    });
+    delete cleaned.id; delete cleaned.teamId; delete cleaned.createdAt; delete cleaned.timestamp; delete cleaned.updatedAt;
+    if (cleaned.members !== undefined) cleaned.members = typeof cleaned.members === 'string' ? cleaned.members : JSON.stringify(cleaned.members || []);
+    if (cleaned.tags !== undefined) cleaned.tags = typeof cleaned.tags === 'string' ? cleaned.tags : JSON.stringify(cleaned.tags || []);
+    if (cleaned.tasksCompleted !== undefined) cleaned.tasksCompleted = Number(cleaned.tasksCompleted);
+    if (cleaned.totalTasks !== undefined) cleaned.totalTasks = Number(cleaned.totalTasks);
+    if (cleaned.performance !== undefined) cleaned.performance = Number(cleaned.performance);
+    if (cleaned.velocity !== undefined) cleaned.velocity = Number(cleaned.velocity);
+    if (cleaned.archived !== undefined) cleaned.archived = Boolean(cleaned.archived);
+
+    // Some BRMH tables expect body.id at root instead of key for PUT/DELETE
+    const putBody = {
+      id: teamId,
+      updates: { ...cleaned, updatedAt: new Date().toISOString() },
+    };
+    const res = await this.makeRequest<any>('?tableName=project-management-teams', { method: 'PUT', body: JSON.stringify(putBody) });
+    if (!res.success) return res;
+    const data = res.data as any;
+    const raw = data?.item || data?.data || data?.result || null;
+    if (raw) return { success: true, data: convertDynamoDBItem(raw) };
+    return { success: true, data: { id: teamId, ...cleaned } };
+  }
+
+  async deleteTeam(teamId: string): Promise<ApiResponse<void>> {
+    const delBody = { id: teamId } as any;
+    return this.makeRequest<void>('?tableName=project-management-teams', { method: 'DELETE', body: JSON.stringify(delBody) });
+  }
+
   async signup(userData: {
     name: string;
-    email: string;
+    username?: string;
+    email?: string;
     phone: string;
     password: string;
   }): Promise<AuthResponse> {
@@ -548,7 +903,7 @@ class ApiService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          username: userData.name,
+          username: userData.username || userData.email || userData.name,
           email: userData.email,
           password: userData.password,
         }),
@@ -566,7 +921,7 @@ class ApiService {
 
       // After successful signup, automatically log in the user
       console.log('Signup successful, attempting auto-login...');
-      const loginResponse = await this.login(userData.email, userData.password);
+      const loginResponse = await this.login(userData.username || (userData.email as string), userData.password);
 
       if (loginResponse.success) {
         return {

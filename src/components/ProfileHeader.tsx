@@ -17,6 +17,9 @@ interface ProfileHeaderProps {
   rightElement?: React.ReactNode;
   onProfilePress?: () => void;
   onRightElementPress?: () => void;
+  notificationsCount?: number;
+  onNotificationsPress?: () => void;
+  onMenuPress?: () => void;
 }
 
 const { width } = Dimensions.get('window');
@@ -27,6 +30,9 @@ const ProfileHeader: React.FC<ProfileHeaderProps> = ({
   rightElement,
   onProfilePress,
   onRightElementPress,
+  notificationsCount = 0,
+  onNotificationsPress,
+  onMenuPress,
 }) => {
   const { user, logout } = useAuth();
   const [showMenu, setShowMenu] = useState(false);
@@ -72,31 +78,51 @@ const ProfileHeader: React.FC<ProfileHeaderProps> = ({
   return (
     <>
       <View style={styles.container}>
-        <View style={styles.leftSection}>
-          <TouchableOpacity style={styles.profileContainer} onPress={handleProfilePress}>
-            <View style={styles.profileImage}>
-              <Ionicons name="person" size={24} color="#137fec" />
-            </View>
-            <View style={styles.profileText}>
-              <Text style={styles.title}>{displayTitle}</Text>
-              <Text style={styles.subtitle}>{displaySubtitle}</Text>
-            </View>
-          </TouchableOpacity>
+        {/* Left: Hamburger Menu */}
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={onMenuPress}
+          activeOpacity={0.7}
+        >
+          <View style={styles.hamburgerContainer}>
+            <Ionicons name="menu" size={26} color="#1f2937" />
+          </View>
+        </TouchableOpacity>
+
+        {/* Center: Title */}
+        <View style={styles.centerContainer}>
+          <Text style={styles.title}>{displayTitle}</Text>
+          <Text style={styles.subtitle}>{displaySubtitle}</Text>
         </View>
         
         <View style={styles.rightSection}>
+          {/* Notification Bell with badge */}
+          <TouchableOpacity
+            style={styles.notificationButton}
+            onPress={onNotificationsPress}
+            activeOpacity={0.7}
+          >
+            <View style={styles.notificationContainer}>
+              <Ionicons name="notifications-outline" size={22} color="#1f2937" />
+              {notificationsCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.badgeText}>{notificationsCount}</Text>
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
+
+          {/* Profile Icon */}
+          <TouchableOpacity style={styles.profileButton} onPress={() => setShowMenu(true)}>
+            <Ionicons name="person" size={20} color="#137fec" />
+          </TouchableOpacity>
+
+          {/* Optional right action (e.g., + Add) */}
           {rightElement ? (
             <TouchableOpacity style={styles.rightButton} onPress={onRightElementPress}>
               {rightElement}
             </TouchableOpacity>
-          ) : (
-            <TouchableOpacity 
-              style={styles.logoutButton} 
-              onPress={() => setShowMenu(true)}
-            >
-              <Ionicons name="menu-outline" size={24} color="#6b7280" />
-            </TouchableOpacity>
-          )}
+          ) : null}
         </View>
       </View>
 
@@ -171,36 +197,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  leftSection: {
-    flex: 1,
+  iconButton: {
+    padding: 8,
   },
-  profileContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  profileImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#eff6ff',
-    alignItems: 'center',
+  hamburgerContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#f9fafb',
     justifyContent: 'center',
-    marginRight: 12,
-    borderWidth: 2,
-    borderColor: '#dbeafe',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
-  profileText: {
+  centerContainer: {
     flex: 1,
+    marginHorizontal: 12,
   },
   title: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: '#1f2937',
     marginBottom: 2,
   },
@@ -209,20 +236,54 @@ const styles = StyleSheet.create({
     color: '#6b7280',
   },
   rightSection: {
-    alignItems: 'flex-end',
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
   rightButton: {
     padding: 8,
   },
-  logoutButton: {
+  notificationButton: {
+    padding: 0,
+  },
+  notificationContainer: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    backgroundColor: '#f9fafb',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#e5e7eb',
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  profileButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#eff6ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#dbeafe',
   },
   modalOverlay: {
     flex: 1,

@@ -25,24 +25,16 @@ const LoginScreen = () => {
   const navigation = useNavigation<LoginScreenNavigationProp>();
   const { login } = useAuth();
 
-  const [email, setEmail] = useState('');
+  const [usernameOrEmail, setUsernameOrEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
-
-  const validateEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
+  const [errors, setErrors] = useState<{ username?: string; password?: string }>({});
 
   const validateForm = (): boolean => {
-    const newErrors: { email?: string; password?: string } = {};
-
-    if (!email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!validateEmail(email)) {
-      newErrors.email = 'Please enter a valid email';
+    const newErrors: { username?: string; password?: string } = {};
+    if (!usernameOrEmail.trim()) {
+      newErrors.username = 'Username or Email is required';
     }
 
     if (!password) {
@@ -63,7 +55,7 @@ const LoginScreen = () => {
     setIsLoading(true);
 
     try {
-      const response = await apiService.login(email, password);
+      const response = await apiService.login(usernameOrEmail, password);
 
       if (response.success && response.user && response.token) {
         // Pass refresh token to login if available
@@ -116,26 +108,24 @@ const LoginScreen = () => {
 
           {/* Form Section */}
           <View style={styles.formSection}>
-            {/* Email Input */}
+            {/* Username/Email Input */}
             <View style={styles.inputContainer}>
-              <View style={[styles.inputWrapper, errors.email && styles.inputError]}>
+              <View style={[styles.inputWrapper, errors.username && styles.inputError]}>
                 <Ionicons name="mail-outline" size={20} color="#6b7280" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="Username or Email *"
                   placeholderTextColor="#9ca3af"
-                  value={email}
+                  value={usernameOrEmail}
                   onChangeText={(text) => {
-                    setEmail(text);
-                    if (errors.email) setErrors({ ...errors, email: undefined });
+                    setUsernameOrEmail(text);
+                    if (errors.username) setErrors({ ...errors, username: undefined });
                   }}
-                  keyboardType="email-address"
                   autoCapitalize="none"
-                  autoComplete="email"
                   editable={!isLoading}
                 />
               </View>
-              {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+              {errors.username && <Text style={styles.errorText}>{errors.username}</Text>}
             </View>
 
             {/* Password Input */}

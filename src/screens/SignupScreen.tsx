@@ -23,7 +23,8 @@ type SignupScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Signu
 
 interface SignupForm {
   name: string;
-  email: string;
+  username: string; // username or email allowed here
+  email: string; // optional if username used
   phone: string;
   password: string;
   confirmPassword: string;
@@ -43,6 +44,7 @@ const SignupScreen = () => {
 
   const [formData, setFormData] = useState<SignupForm>({
     name: '',
+    username: '',
     email: '',
     phone: '',
     password: '',
@@ -73,9 +75,11 @@ const SignupScreen = () => {
       newErrors.name = 'Name must be at least 3 characters';
     }
 
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!validateEmail(formData.email)) {
+    // username OR email required
+    if (!formData.username.trim() && !formData.email.trim()) {
+      newErrors.email = 'Provide a username or email';
+    }
+    if (formData.email && !validateEmail(formData.email)) {
       newErrors.email = 'Please enter a valid email';
     }
 
@@ -113,10 +117,12 @@ const SignupScreen = () => {
     try {
       const response = await apiService.signup({
         name: formData.name.trim(),
-        email: formData.email.trim().toLowerCase(),
+        // backend accepts username/email; send whichever provided
+        username: formData.username.trim() || undefined,
+        email: formData.email ? formData.email.trim().toLowerCase() : undefined,
         phone: formData.phone.trim(),
         password: formData.password,
-      });
+      } as any);
 
       if (response.success && response.user && response.token) {
         await login(response.user, response.token);
@@ -200,24 +206,40 @@ const SignupScreen = () => {
               {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
             </View>
 
-            {/* Email Input */}
+            {/* Username (or Email) Input */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Email Address</Text>
+              <Text style={styles.inputLabel}>Username (or Email)</Text>
               <View style={[styles.inputWrapper, errors.email && styles.inputError]}>
                 <Ionicons name="mail-outline" size={20} color="#6b7280" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter your email"
+                  placeholder="Enter username (or email)"
+                  placeholderTextColor="#9ca3af"
+                  value={formData.username}
+                  onChangeText={(text) => updateFormData('username', text)}
+                  autoCapitalize="none"
+                  editable={!isLoading}
+                />
+              </View>
+              {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+            </View>
+
+            {/* Optional Email Input */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Email (optional)</Text>
+              <View style={[styles.inputWrapper, errors.email && styles.inputError]}>
+                <Ionicons name="at-outline" size={20} color="#6b7280" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter your email (optional)"
                   placeholderTextColor="#9ca3af"
                   value={formData.email}
                   onChangeText={(text) => updateFormData('email', text)}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  autoComplete="email"
                   editable={!isLoading}
                 />
               </View>
-              {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
             </View>
 
             {/* Phone Input */}

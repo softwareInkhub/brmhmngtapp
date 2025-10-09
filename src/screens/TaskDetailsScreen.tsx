@@ -15,14 +15,18 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import { Task } from '../types';
 import ProfileHeader from '../components/ProfileHeader';
 import { apiService } from '../services/api';
+import { useAppContext } from '../context/AppContext';
 
 const TaskDetailsScreen = () => {
   const route = useRoute();
   const navigation = useNavigation();
   const { taskId } = route.params as { taskId: string };
+  const { state } = useAppContext();
   const [newComment, setNewComment] = useState('');
   const [task, setTask] = useState<Task | null>(null);
+  const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [subtasksExpanded, setSubtasksExpanded] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
@@ -52,7 +56,28 @@ const TaskDetailsScreen = () => {
         console.log('Task description:', response.data.description);
         console.log('Task project:', response.data.project);
         console.log('Task assignee:', response.data.assignee);
-        setTask(response.data);
+        const t = response.data as Task;
+        setTask(t);
+        // fetch subtasks by two methods: direct children (parentId = id) and ids listed in subtasks JSON
+        const allRes = await apiService.getTasks();
+        let children: Task[] = [];
+        if (allRes.success && allRes.data) {
+          const list = allRes.data as Task[];
+          // direct children
+          children = list.filter(x => (x as any).parentId === t.id);
+          // ids in subtasks field
+          try {
+            const arr = t.subtasks ? JSON.parse((t as any).subtasks as any) : [];
+            if (Array.isArray(arr)) {
+              const byIds = list.filter(x => arr.includes(x.id));
+              // merge unique
+              const map: any = {};
+              [...children, ...byIds].forEach(x => { map[x.id] = x; });
+              children = Object.values(map);
+            }
+          } catch {}
+        }
+        setSubtasks(children);
       } else {
         console.error('Failed to fetch task:', response.error);
         Alert.alert('Error', 'Failed to load task details');
@@ -423,6 +448,42 @@ const TaskDetailsScreen = () => {
             </View>
           </View>
 
+        {/* Subtasks */}
+        <View style={styles.subtasksSection}>
+          <View style={styles.subtasksHeader}>
+            <Text style={styles.sectionTitle}>Subtasks ({subtasks.length})</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TouchableOpacity onPress={() => setSubtasksExpanded(!subtasksExpanded)}>
+                <Ionicons name={subtasksExpanded ? 'chevron-up' : 'chevron-down'} size={18} color="#6b7280" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => (navigation as any).navigate('CreateTask', { parentTaskId: task.id })} style={styles.addSubtaskBtn}>
+                <Ionicons name="add" size={18} color="#137fec" />
+                <Text style={styles.addSubtaskText}>Subtask</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          {subtasksExpanded && (
+            <View style={styles.subtasksList}>
+              {subtasks.length === 0 ? (
+                <Text style={{ color: '#9ca3af' }}>No subtasks yet</Text>
+              ) : (
+                subtasks.map((st) => (
+                  <TouchableOpacity key={st.id} style={styles.subtaskItem} onPress={() => (navigation as any).navigate('TaskDetails', { taskId: st.id })}>
+                    <View style={[styles.subtaskStatus, { backgroundColor: getStatusColor(st.status).bg }]}> 
+                      <Text style={[styles.subtaskStatusText, { color: getStatusColor(st.status).text }]}>{st.status}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.subtaskTitle} numberOfLines={1}>{st.title || 'Untitled'}</Text>
+                      <Text style={styles.subtaskMeta} numberOfLines={1}>{st.assignee || 'Unassigned'} • {st.dueDate || 'No date'}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
+                  </TouchableOpacity>
+                ))
+              )}
+            </View>
+          )}
+        </View>
+
           {/* Tags */}
           {isEditing ? (
             <View style={styles.tagsSection}>
@@ -509,16 +570,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 10,
     marginBottom: 10,
+   
   },
   taskHeader: {
-    marginBottom: 16,
+    marginBottom: 1,
   },
   taskTitle: {
     fontSize: 24,
     fontWeight: '700',
     color: '#1f2937',
-    marginBottom: 12,
-    lineHeight: 32,
+    marginBottom: 4,
+    lineHeight: 28,
   },
   taskMeta: {
     flexDirection: 'row',
@@ -529,8 +591,8 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     color: '#1f2937',
-    marginBottom: 12,
-    lineHeight: 32,
+    marginBottom: 4,
+    lineHeight: 28,
     backgroundColor: '#f9fafb',
     borderRadius: 8,
     paddingHorizontal: 10,
@@ -708,6 +770,77 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 16,
     color: '#ef4444',
+  },
+  // Subtasks Section Styles
+  subtasksSection: {
+    marginBottom: 24,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  subtasksHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  addSubtaskBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#eff6ff',
+    borderRadius: 6,
+  },
+  addSubtaskText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#137fec',
+  },
+  subtasksList: {
+    gap: 8,
+  },
+  subtaskItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderLeftWidth: 3,
+    borderLeftColor: '#137fec',
+  },
+  subtaskStatus: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  subtaskStatusText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  subtaskTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 2,
+  },
+  subtaskMeta: {
+    fontSize: 11,
+    color: '#6b7280',
   },
 });
 
