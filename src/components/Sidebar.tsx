@@ -23,12 +23,30 @@ const { width, height } = Dimensions.get('window');
 const SIDEBAR_WIDTH = width * 0.75; // 75% of screen width
 
 const Sidebar: React.FC<SidebarProps> = ({ visible, onClose }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, roleForNamespace, refreshNamespaceRoles } = useAuth();
+  const pmRole = (roleForNamespace('projectmanagement') || 'user') as 'admin' | 'manager' | 'user';
+  
+  // Debug logging for Sidebar role display
+  console.log('🎨 [SIDEBAR] Rendering with role:', pmRole);
+  console.log('👤 [SIDEBAR] User info:', {
+    username: user?.name,
+    email: user?.email,
+    hasNamespaceRoles: !!(user as any)?.namespaceRoles
+  });
+  
+  const roleColors: Record<'admin'|'manager'|'user', {bg: string; text: string; icon: string; border: string}> = {
+    admin: { bg: '#fee2e2', text: '#ef4444', icon: '#ef4444', border: '#fecaca' },
+    manager: { bg: '#fef3c7', text: '#f59e0b', icon: '#f59e0b', border: '#fde68a' },
+    user: { bg: '#dcfce7', text: '#10b981', icon: '#10b981', border: '#bbf7d0' },
+  };
+  const rc = roleColors[pmRole];
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
+      // Pull latest roles from DB when opening sidebar so role badge is up to date
+      refreshNamespaceRoles().catch(() => {});
       // Open sidebar
       Animated.parallel([
         Animated.timing(slideAnim, {
@@ -63,6 +81,42 @@ const Sidebar: React.FC<SidebarProps> = ({ visible, onClose }) => {
     logout();
   };
 
+  const handleDebugRoleInfo = () => {
+    const u: any = user || {};
+    const debugInfo = {
+      username: u.username || u.name || 'N/A',
+      email: u.email || 'N/A',
+      hasNamespaceRoles: !!u.namespaceRoles,
+      namespaceRolesType: typeof u.namespaceRoles,
+      currentRole: pmRole,
+      rawNamespaceRoles: u.namespaceRoles ? JSON.stringify(u.namespaceRoles, null, 2) : 'null'
+    };
+    
+    console.log('🐛 [DEBUG] Full role info:', debugInfo);
+    
+    Alert.alert(
+      '🐛 Debug Role Info',
+      `Username: ${debugInfo.username}\n` +
+      `Email: ${debugInfo.email}\n` +
+      `Current Role: ${debugInfo.currentRole}\n` +
+      `Has NamespaceRoles: ${debugInfo.hasNamespaceRoles}\n` +
+      `Type: ${debugInfo.namespaceRolesType}\n\n` +
+      `Check console logs for full namespaceRoles data.`,
+      [
+        { text: 'Refresh Roles', onPress: () => {
+          console.log('🔄 [DEBUG] Manually refreshing roles...');
+          refreshNamespaceRoles().then(() => {
+            console.log('✅ [DEBUG] Roles refreshed!');
+            Alert.alert('Success', 'Roles refreshed! Check console logs for updated data.');
+          }).catch((e) => {
+            console.log('❌ [DEBUG] Failed to refresh roles:', e);
+          });
+        }},
+        { text: 'OK' }
+      ]
+    );
+  };
+
   const menuItems = [
     { id: 'dashboard', icon: 'grid-outline', label: 'Dashboard', badge: null },
     { id: 'tasks', icon: 'checkmark-circle-outline', label: 'Tasks', badge: null },
@@ -75,6 +129,7 @@ const Sidebar: React.FC<SidebarProps> = ({ visible, onClose }) => {
     { id: 'profile', icon: 'person-outline', label: 'My Profile' },
     { id: 'settings', icon: 'settings-outline', label: 'Settings' },
     { id: 'notifications', icon: 'notifications-outline', label: 'Notifications' },
+    { id: 'debug', icon: 'bug-outline', label: '🐛 Debug Role Info' },
     { id: 'help', icon: 'help-circle-outline', label: 'Help & Support' },
   ];
 
@@ -127,10 +182,10 @@ const Sidebar: React.FC<SidebarProps> = ({ visible, onClose }) => {
               <Text style={styles.profileName}>{user?.name || 'User'}</Text>
               <Text style={styles.profileEmail}>{user?.email || 'user@example.com'}</Text>
 
-              {user?.role && (
-                <View style={styles.roleBadge}>
-                  <Ionicons name="shield-checkmark" size={12} color="#137fec" />
-                  <Text style={styles.roleText}>{user.role.toUpperCase()}</Text>
+              {(
+                <View style={[styles.roleBadge, { backgroundColor: rc.bg, borderColor: rc.border }] }>
+                  <Ionicons name="shield-checkmark" size={12} color={rc.icon} />
+                  <Text style={[styles.roleText, { color: rc.text }]}>{pmRole.toUpperCase()}</Text>
                 </View>
               )}
             </View>
@@ -170,8 +225,12 @@ const Sidebar: React.FC<SidebarProps> = ({ visible, onClose }) => {
                   key={item.id}
                   style={styles.menuItem}
                   onPress={() => {
-                    onClose();
-                    // Add navigation logic here
+                    if (item.id === 'debug') {
+                      handleDebugRoleInfo();
+                    } else {
+                      onClose();
+                      // Add navigation logic here
+                    }
                   }}
                 >
                   <View style={styles.menuItemLeft}>
@@ -301,6 +360,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 16,
     gap: 4,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
   },
   roleText: {
     fontSize: 11,

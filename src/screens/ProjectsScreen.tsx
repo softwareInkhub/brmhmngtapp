@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Dimensions, TextInput, Modal, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import ProfileHeader from '../components/ProfileHeader';
+import { useAuth } from '../context/AuthContext';
 import Sidebar from '../components/Sidebar';
 import { apiService } from '../services/api';
 
@@ -187,16 +188,21 @@ const ProjectsScreen = ({ navigation }: any) => {
 
   const getCountByStatus = (status: string) => filteredProjects.filter(p => (p.status || '').toString() === status).length;
 
+  const { hasPermission } = useAuth();
   return (
     <SafeAreaView style={styles.container}>
       <Sidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
       <ProfileHeader
         title="My Projects"
         subtitle="Project management"
-        rightElement={
-          <Ionicons name="add" size={24} color="#137fec" />
-        }
-        onRightElementPress={() => setShowCreateProjectModal(true)}
+        rightElement={(() => {
+          if (!hasPermission('projectmanagement','crud')) return null;
+          return <Ionicons name="add" size={24} color="#137fec" />;
+        })()}
+        onRightElementPress={() => {
+          if (!hasPermission('projectmanagement','crud')) return;
+          setShowCreateProjectModal(true);
+        }}
         onMenuPress={() => setSidebarVisible(true)}
       />
 
@@ -661,11 +667,11 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1f2937' },
   headerSubtitle: { fontSize: 12, color: '#6b7280' },
   addButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  searchContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16 },
-  searchBarWrapper: { flex: 1, marginRight: 12 },
+  searchContainer: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', paddingHorizontal: 16, minHeight: 48 },
+  searchBarWrapper: { flex: 1, marginRight: 12, position: 'absolute', left: 16, right: 90 },
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: '#e5e7eb' },
   searchBarActive: { borderColor: '#137fec' },
-  iconsRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  iconsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 'auto' },
   iconButton: { padding: 8, borderRadius: 8, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb' },
   pillsContainer: { borderTopWidth: 1, borderTopColor: '#e5e7eb', paddingTop: 8, paddingBottom: 8, marginTop: 8 },
   pillsRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 6 },

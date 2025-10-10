@@ -19,6 +19,7 @@ import { useAppContext } from '../context/AppContext';
 import { apiService } from '../services/api';
 import CreateTaskForm from '../components/CreateTaskForm';
 import ProfileHeader from '../components/ProfileHeader';
+import { useAuth } from '../context/AuthContext';
 import Sidebar from '../components/Sidebar';
 
 const TasksScreen = () => {
@@ -447,6 +448,8 @@ const TasksScreen = () => {
       }
     };
 
+  const { hasPermission } = useAuth();
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Sidebar */}
@@ -456,19 +459,25 @@ const TasksScreen = () => {
       <ProfileHeader
         title="My Tasks"
         subtitle="Task management"
-        rightElement={
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setShowCreateTaskModal(true)}
-          >
-            <Ionicons name="add-circle" size={24} color="#0ea5e9" />
-          </TouchableOpacity>
-        }
+        rightElement={(() => {
+          if (!hasPermission('projectmanagement','crud')) return null;
+          return (
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => setShowCreateTaskModal(true)}
+            >
+              <Ionicons name="add-circle" size={24} color="#0ea5e9" />
+            </TouchableOpacity>
+          );
+        })()}
         onMenuPress={() => setSidebarVisible(true)}
         onProfilePress={() => {
           // Handle profile navigation
         }}
-        onRightElementPress={() => setShowCreateTaskModal(true)}
+        onRightElementPress={() => {
+          if (!hasPermission('projectmanagement','crud')) return;
+          setShowCreateTaskModal(true);
+        }}
       />
         
 
@@ -501,7 +510,7 @@ const TasksScreen = () => {
               style={styles.filterIcon}
               onPress={() => setShowFilters(!showFilters)}
             >
-              <Ionicons name="options-outline" size={20} color="#6b7280" />
+              <Ionicons name="filter-outline" size={20} color="#6b7280" />
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -1692,31 +1701,34 @@ const styles = StyleSheet.create({
   },
   searchIconButton: {
     padding: 8,
-    borderRadius: 6,
+    borderRadius: 8,
     backgroundColor: '#f9fafb',
-    borderWidth: 0,
-    height: 32,
-    width: 32,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    height: 36,
+    width: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   filterIcon: {
     padding: 8,
-    borderRadius: 6,
+    borderRadius: 8,
     backgroundColor: '#f9fafb',
-    borderWidth: 0,
-    height: 32,
-    width: 32,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    height: 36,
+    width: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   toggleIcon: {
     padding: 8,
-    borderRadius: 6,
+    borderRadius: 8,
     backgroundColor: '#f9fafb',
-    borderWidth: 0,
-    height: 32,
-    width: 32,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    height: 36,
+    width: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },

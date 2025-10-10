@@ -9,10 +9,12 @@ import {
   FlatList,
   Animated,
   Alert,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../context/AuthContext';
 import { useAppContext } from '../context/AppContext';
 import { apiService } from '../services/api';
 import DashboardHeader from '../components/DashboardHeader';
@@ -33,6 +35,9 @@ const DashboardScreen = () => {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
   const [teamsDb, setTeamsDb] = useState<any[]>([]);
+  const [showAssignRoleModal, setShowAssignRoleModal] = useState(false);
+  const [selectedUserForRole, setSelectedUserForRole] = useState<any>(null);
+  const [selectedRole, setSelectedRole] = useState<'admin'|'manager'|'user'>('user');
   const fadeAnim = useState(new Animated.Value(0))[0];
 
   // Fetch tasks data on component mount
@@ -63,6 +68,40 @@ const DashboardScreen = () => {
       if (res.success && res.data) setUsers(res.data);
     } catch {}
   };
+  const openAssignRole = (u: any) => {
+    setSelectedUserForRole(u);
+    setSelectedRole('user');
+    setShowAssignRoleModal(true);
+  };
+
+  const { hasPermission, refreshNamespaceRoles, user: authedUser } = useAuth();
+  const canAssignUsers = hasPermission('projectmanagement','assign:users');
+
+  // Robust role reader for arbitrary user objects (converted or raw-ish)
+  const getRoleFromUser = (u: any): 'admin'|'manager'|'user' => {
+    try {
+      let nr: any = u?.namespaceRoles || (u?.metadata && u.metadata.namespaceRoles) || {};
+      if (typeof nr === 'string') { try { nr = JSON.parse(nr); } catch {} }
+      // Unwrap Dynamo top-level M if present
+      const base = nr && nr.M && typeof nr.M === 'object' ? nr.M : nr;
+      const pm = base?.projectmanagement;
+      if (!pm) return 'user';
+      // Dynamo form
+      const dynRole = pm?.M?.role?.S;
+      if (dynRole) return (dynRole === 'admin' || dynRole === 'manager') ? dynRole : 'user';
+      // Plain form
+      const plainRole = pm?.role;
+      if (plainRole) return (plainRole === 'admin' || plainRole === 'manager') ? plainRole : 'user';
+      // Infer from permissions
+      const permsDyn = pm?.M?.permissions?.L?.map((p: any) => p?.S).filter(Boolean) || [];
+      const permsPlain = Array.isArray(pm?.permissions) ? pm.permissions : [];
+      const perms = (permsDyn.length ? permsDyn : permsPlain) as string[];
+      if (perms.includes('crud:all') && perms.includes('assign:users')) return 'admin';
+      if (perms.includes('crud:all')) return 'manager';
+      return 'user';
+    } catch { return 'user'; }
+  };
+
 
   const fetchTeamsDb = async () => {
     try {
@@ -652,16 +691,106 @@ const DashboardScreen = () => {
                   <View style={styles.userInfo}>
                     <Text style={styles.userName}>{u.name || u.username || u.email || 'User'}</Text>
                     <Text style={styles.userDetails}>{(u.appsCount ?? 0)} apps • {((u.lastActive || u.createdAt || '').toString().slice(0,10)) || '—'}</Text>
+                    <Text style={{ color:'#6b7280', fontSize:11, marginTop:2 }}>
+                      Role: {getRoleFromUser(u)}
+                    </Text>
                   </View>
-                  <TouchableOpacity style={styles.userActionButton}>
-                    <Ionicons name="ellipsis-vertical" size={16} color="#6b7280" />
-                  </TouchableOpacity>
+                  {canAssignUsers && (
+                    <TouchableOpacity style={styles.userActionButton} onPress={() => openAssignRole(u)}>
+                      <Ionicons name="person-add-outline" size={18} color="#137fec" />
+                    </TouchableOpacity>
+                  )}
                 </View>
               ))}
             </View>
           </View>
         )}
 
+        {/* Assign Role Modal */}
+        <Modal
+          visible={showAssignRoleModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowAssignRoleModal(false)}
+        >
+          <View style={styles.modalBackdrop}>
+            <TouchableOpacity style={styles.backdropTouchable} activeOpacity={1} onPress={() => setShowAssignRoleModal(false)} />
+            <View style={styles.sheetModal}>
+              <View style={styles.sheetHeader}>
+                <Text style={styles.sheetTitle}>Assign Role</Text>
+                <TouchableOpacity onPress={() => setShowAssignRoleModal(false)}>
+                  <Ionicons name="close" size={24} color="#6b7280" />
+                </TouchableOpacity>
+              </View>
+              <View style={{ paddingHorizontal: 20, paddingVertical: 12 }}>
+                <Text style={{ color: '#374151', fontWeight: '600', marginBottom: 8 }}>
+                  {(selectedUserForRole?.name || selectedUserForRole?.username || selectedUserForRole?.email) ?? ''}
+                </Text>
+                <View style={{ flexDirection:'row', gap:8, marginBottom: 16 }}>
+                  {(['admin','manager','user'] as const).map(r => (
+                    <TouchableOpacity key={r} onPress={() => setSelectedRole(r)} style={{ paddingHorizontal:12, paddingVertical:8, borderRadius:20, borderWidth:1, borderColor: selectedRole===r? '#137fec' : '#e5e7eb', backgroundColor: selectedRole===r? '#eff6ff':'#fff' }}>
+                      <Text style={{ color: selectedRole===r? '#137fec':'#374151', fontWeight:'600', textTransform:'capitalize' }}>{r}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {/* Preselect current role if known */}
+                {(() => { try { const nr = (selectedUserForRole?.namespaceRoles && typeof selectedUserForRole.namespaceRoles === 'string') ? JSON.parse(selectedUserForRole.namespaceRoles) : (selectedUserForRole?.namespaceRoles || (selectedUserForRole?.metadata && selectedUserForRole.metadata.namespaceRoles) || {}); const pm = nr?.projectmanagement; const cur = pm?.M?.role?.S || pm?.role; if (cur && (cur==='admin'||cur==='manager'||cur==='user')) { if (selectedRole !== cur) setSelectedRole(cur); } } catch {} return null; })()}
+                <TouchableOpacity
+                  style={{ backgroundColor:'#137fec', alignItems:'center', justifyContent:'center', height:46, borderRadius:12 }}
+                  onPress={async () => {
+                    if (!selectedUserForRole) return;
+                    const res = await apiService.assignNamespaceRole({
+                      userId: selectedUserForRole.id || selectedUserForRole.userId,
+                      namespace: 'projectmanagement',
+                      role: selectedRole,
+                      assignedBy: ((authedUser as any)?.id || (authedUser as any)?.userId || 'system'),
+                    });
+                    if (res.success) {
+                      Alert.alert('Success', 'Role assigned successfully');
+                      setShowAssignRoleModal(false);
+                      // Optimistically update local role to show immediately
+                      setUsers(prev => prev.map(u => {
+                        const uid = u.id || u.userId;
+                        const tid = selectedUserForRole.id || selectedUserForRole.userId;
+                        if (uid && tid && uid === tid) {
+                          const updated: any = { ...u };
+                          const nr0: any = updated.namespaceRoles || {};
+                          let nr = typeof nr0 === 'string' ? (()=>{ try { return JSON.parse(nr0); } catch { return {}; } })() : nr0;
+                          if (nr && nr.M && typeof nr.M === 'object') {
+                            nr.M.projectmanagement = nr.M.projectmanagement || { M: {} };
+                            nr.M.projectmanagement.M = nr.M.projectmanagement.M || {};
+                            nr.M.projectmanagement.M.role = { S: selectedRole } as any;
+                            nr.M.projectmanagement.M.permissions = { L: (selectedRole==='admin'||selectedRole==='manager') ? [{S:'crud:all'},{S:'assign:users'},{S:'read:all'}] : [{S:'read:all'}] } as any;
+                          } else {
+                            nr = nr || {};
+                            nr.projectmanagement = {
+                              role: selectedRole,
+                              permissions: (selectedRole==='admin'||selectedRole==='manager') ? ['crud:all','assign:users','read:all'] : ['read:all']
+                            } as any;
+                          }
+                          updated.namespaceRoles = nr;
+                          return updated;
+                        }
+                        return u;
+                      }));
+                      await fetchUsers();
+                      // If assigning to self, refresh roles immediately
+                      const targetId = selectedUserForRole.id || selectedUserForRole.userId;
+                      const selfId = (authedUser as any)?.id || (authedUser as any)?.userId;
+                      if (selfId && targetId && selfId === targetId) {
+                        await refreshNamespaceRoles();
+                      }
+                    } else {
+                      Alert.alert('Error', (res as any).error || 'Failed to assign role');
+                    }
+                  }}
+                >
+                  <Text style={{ color:'#fff', fontWeight:'700' }}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
         {userManagementTab === 'Teams' && (
           <View style={styles.userTabContent}>
             <Text style={styles.recentUsersTitle}>Team Management</Text>
@@ -800,6 +929,9 @@ const DashboardScreen = () => {
 
     </Animated.View>
   );
+
+  // Styles for modal reused across app
+  // If already present in this file, these will merge with existing StyleSheet keys
 
 
 
@@ -1852,6 +1984,12 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontWeight: '500',
   },
+  // Modal styles (reuse)
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  backdropTouchable: { flex: 1 },
+  sheetModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%', minHeight: '50%' },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  sheetTitle: { fontSize: 18, fontWeight: '700', color: '#1f2937' },
   // Permissions
   permissionList: {
     gap: 8,

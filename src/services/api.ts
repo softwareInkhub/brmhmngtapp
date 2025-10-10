@@ -852,6 +852,53 @@ class ApiService {
     return { success: true, data: teams };
   }
 
+  // Assign namespace role to user
+  async assignNamespaceRole(params: {
+    userId: string;
+    namespace: string;
+    role: 'admin' | 'manager' | 'user' | 'member';
+    permissions?: string[];
+    assignedBy?: string;
+  }): Promise<ApiResponse<any>> {
+    const { userId, namespace, role } = params;
+    if (!userId || !namespace || !role) {
+      return { success: false, error: 'Missing required fields' };
+    }
+    const resolvedRole = role === 'member' ? 'user' : role;
+    const defaultPerms = resolvedRole === 'admin' || resolvedRole === 'manager'
+      ? ['crud:all', 'assign:users', 'read:all']
+      : ['read:all'];
+    const body = {
+      userId,
+      namespace,
+      role: resolvedRole,
+      permissions: params.permissions && params.permissions.length ? params.permissions : defaultPerms,
+      assignedBy: params.assignedBy || 'system',
+    } as any;
+
+    try {
+      console.log('[assignNamespaceRole] Request body:', body);
+      const response = await fetch('https://brmh.in/namespace-roles/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const ok = response.ok;
+      let data: any = null;
+      try { data = await response.json(); } catch {
+        try { const text = await response.text(); data = { raw: text }; } catch {}
+      }
+      console.log('[assignNamespaceRole] Response:', response.status, data);
+      if (!ok) {
+        const errMsg = data?.error || data?.message || data?.raw || 'assign failed';
+        return { success: false, error: `HTTP ${response.status}: ${errMsg}` };
+      }
+      return { success: true, data: data || { success: true } };
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'assign failed' };
+    }
+  }
+
   async updateTeam(teamId: string, updates: Partial<any>): Promise<ApiResponse<any>> {
     const cleaned: any = {};
     Object.entries(updates).forEach(([k, v]) => {

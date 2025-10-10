@@ -12,10 +12,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAppContext } from '../context/AppContext';
 import { apiService } from '../services/api';
 import ProfileHeader from '../components/ProfileHeader';
+import { useAuth } from '../context/AuthContext';
 import Sidebar from '../components/Sidebar';
 
 const TeamsScreen = () => {
@@ -42,6 +43,19 @@ const TeamsScreen = () => {
   });
   const [showTeamDetailsModal, setShowTeamDetailsModal] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<any>(null);
+  
+  // Search, filter, view mode
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [selectedStatus, setSelectedStatus] = useState<string>('All');
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  
+  const teamStatuses = ['All', 'Active', 'Archived'];
+  const statusColors: Record<string, string> = {
+    Active: '#10b981',
+    Archived: '#6b7280',
+  };
   const setTeamName = (t: string) => setTeamForm(p => ({ ...p, name: t }));
   const setTeamDesc = (t: string) => setTeamForm(p => ({ ...p, description: t }));
   const setTeamProject = (t: string) => setTeamForm(p => ({ ...p, project: t }));
@@ -90,13 +104,32 @@ const TeamsScreen = () => {
       const res = await apiService.createTeam(payload);
       if (res.success && res.data) {
         // Normalize returned item
+        let members = [];
+        if (Array.isArray(res.data.members)) {
+          members = res.data.members;
+        } else if (typeof res.data.members === 'string' && res.data.members.trim()) {
+          try {
+            members = JSON.parse(res.data.members);
+          } catch (e) {
+            console.warn('Failed to parse members JSON in creation response:', res.data.members);
+            members = teamForm.members; // Fallback to form data
+          }
+        }
+        
         const created = { 
           ...res.data,
-          members: Array.isArray(res.data.members) ? res.data.members : (res.data.members ? JSON.parse(res.data.members) : []),
-          memberCount: Array.isArray(res.data.members) ? res.data.members.length : (res.data.members ? JSON.parse(res.data.members).length : 0),
+          members,
+          memberCount: members.length
         } as any;
+        
         // Update local list used by screen
         setTeams(prev => [created, ...prev]);
+        
+        // Also refresh from server to ensure we have the latest data
+        setTimeout(() => {
+          fetchTeams();
+        }, 500);
+        
         setShowCreateTeamModal(false);
         setTeamForm({ name: '', description: '', project: '', budget: '', startDate: new Date().toISOString().slice(0,10), tags: [], members: [] });
         Alert.alert('Success', 'Team created successfully');
@@ -113,16 +146,49 @@ const TeamsScreen = () => {
     try {
       const res = await apiService.getTeams();
       if (res.success && res.data) {
-        const list = res.data.map((t:any) => ({ ...t, members: Array.isArray(t.members) ? t.members : (t.members ? JSON.parse(t.members) : []), memberCount: (Array.isArray(t.members) ? t.members : (t.members ? JSON.parse(t.members) : []) ).length }));
+        const list = res.data.map((t:any) => {
+          // Parse members properly
+          let members = [];
+          if (Array.isArray(t.members)) {
+            members = t.members;
+          } else if (typeof t.members === 'string' && t.members.trim()) {
+            try {
+              members = JSON.parse(t.members);
+            } catch (e) {
+              console.warn('Failed to parse members JSON:', t.members);
+              members = [];
+            }
+          }
+          
+          return {
+            ...t,
+            members,
+            memberCount: members.length
+          };
+        });
         setTeams(list);
       }
-    } catch {}
+    } catch (error) {
+      console.error('Error fetching teams:', error);
+    }
   };
   React.useEffect(() => { fetchTeams(); }, []);
-  // Also refresh when screen regains focus (ensures latest after navigations)
-  // Note: importing useFocusEffect would require updating imports; skipping to keep minimal
+  
+  // Refresh teams when screen comes into focus (e.g., after navigation)
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchTeams();
+    }, [])
+  );
 
+  const { hasPermission } = useAuth();
   const handleTeamMenu = (team: any) => {
+    if (!hasPermission('projectmanagement','crud')) {
+      // View-only users cannot edit/delete
+      setSelectedTeam(team);
+      setShowTeamDetailsModal(true);
+      return;
+    }
     Alert.alert(
       'Team Options',
       `What would you like to do with "${team.name || 'Untitled Team'}"?`,
@@ -131,8 +197,15 @@ const TeamsScreen = () => {
         { text: 'Edit', onPress: () => { setSelectedTeam(team); setShowTeamDetailsModal(true); } },
         { text: 'Delete', style: 'destructive', onPress: async () => {
           const res = await apiService.deleteTeam(team.id || team.teamId);
-          if (res.success) setTeams(prev => prev.filter(t => (t.id||t.teamId)!==(team.id||team.teamId)));
-          else Alert.alert('Error', (res as any).error || 'Failed to delete team');
+          if (res.success) {
+            setTeams(prev => prev.filter(t => (t.id||t.teamId)!==(team.id||team.teamId)));
+            // Also refresh from server to ensure consistency
+            setTimeout(() => {
+              fetchTeams();
+            }, 500);
+          } else {
+            Alert.alert('Error', (res as any).error || 'Failed to delete team');
+          }
         }}
       ]
     );
@@ -151,7 +224,7 @@ const TeamsScreen = () => {
       </TouchableOpacity>
       <TouchableOpacity onPress={() => handleTeamMenu(item)} style={{ padding: 6 }}>
         <Ionicons name="ellipsis-horizontal" size={18} color="#6b7280" />
-      </TouchableOpacity>
+    </TouchableOpacity>
     </View>
   );
 
@@ -162,28 +235,126 @@ const TeamsScreen = () => {
       <ProfileHeader
         title="My Teams"
         subtitle="Team management"
-        rightElement={
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setShowCreateTeamModal(true)}
-          >
-            <Ionicons name="add" size={24} color="#137fec" />
-          </TouchableOpacity>
-        }
+        rightElement={(() => {
+          if (!hasPermission('projectmanagement','crud')) return null;
+          return (
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => setShowCreateTeamModal(true)}
+            >
+              <Ionicons name="add" size={24} color="#137fec" />
+            </TouchableOpacity>
+          );
+        })()}
         onProfilePress={() => {
           // Handle profile navigation
         }}
-        onRightElementPress={() => setShowCreateTeamModal(true)}
+        onRightElementPress={() => {
+          if (!hasPermission('projectmanagement','crud')) return;
+          setShowCreateTeamModal(true);
+        }}
         onMenuPress={() => setSidebarVisible(true)}
       />
 
+      {/* Search and Filter Bar */}
+      <View style={styles.topBar}>
+        {searchVisible && (
+          <View style={[styles.searchContainer, { borderColor: '#c084fc', borderWidth: 1 }]}>
+            <Ionicons name="search" size={18} color="#9ca3af" style={{ marginRight: 8 }} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search teams..."
+              placeholderTextColor="#9ca3af"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoFocus
+            />
+          </View>
+        )}
+        <View style={styles.iconGroup}>
+          <TouchableOpacity style={styles.iconButton} onPress={() => setSearchVisible(!searchVisible)}>
+            <Ionicons name="search-outline" size={20} color="#6b7280" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} onPress={() => setShowFilterDropdown(!showFilterDropdown)}>
+            <Ionicons name="filter-outline" size={20} color="#6b7280" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} onPress={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}>
+            <Ionicons name={viewMode === 'list' ? 'apps-outline' : 'list-outline'} size={20} color="#6b7280" />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Filter Dropdown */}
+      {showFilterDropdown && (
+        <View style={styles.filterDropdown}>
+          <View style={styles.filterHeader}>
+            <Text style={styles.filterTitle}>Filter by Status</Text>
+            <TouchableOpacity onPress={() => setShowFilterDropdown(false)}>
+              <Ionicons name="close" size={20} color="#6b7280" />
+            </TouchableOpacity>
+          </View>
+          {teamStatuses.map(status => (
+            <TouchableOpacity
+              key={status}
+              style={styles.filterItem}
+              onPress={() => { setSelectedStatus(status); setShowFilterDropdown(false); }}
+            >
+              <Text style={[styles.filterItemText, selectedStatus === status && { fontWeight: '600', color: '#137fec' }]}>{status}</Text>
+              {selectedStatus === status && <Ionicons name="checkmark" size={18} color="#137fec" />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Status Pills */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statusPillsContainer} contentContainerStyle={styles.statusPillsContent}>
+        {teamStatuses.map(status => {
+          const count = status === 'All' ? teams.length : teams.filter(t => (t.archived ? 'Archived' : 'Active') === status).length;
+          return (
+            <TouchableOpacity
+              key={status}
+              style={[styles.statusPill, selectedStatus === status && { backgroundColor: '#137fec20', borderColor: '#137fec' }]}
+              onPress={() => setSelectedStatus(status)}
+            >
+              <Text style={[styles.statusPillText, selectedStatus === status && { color: '#137fec', fontWeight: '600' }]}>{status}</Text>
+              <View style={[styles.statusBadge, { backgroundColor: selectedStatus === status ? '#137fec' : '#e5e7eb' }]}>
+                <Text style={[styles.statusBadgeText, { color: selectedStatus === status ? '#fff' : '#6b7280' }]}>{count}</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
       {/* Teams List */}
       <FlatList
-        data={teams}
-        renderItem={renderTeamItem}
+        key={viewMode} // Force re-render when view mode changes
+        data={teams.filter(t => {
+          const matchesSearch = !searchQuery.trim() || (t.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+          const matchesStatus = selectedStatus === 'All' || (t.archived ? 'Archived' : 'Active') === selectedStatus;
+          return matchesSearch && matchesStatus;
+        })}
+        renderItem={viewMode === 'list' ? renderTeamItem : ({ item }) => (
+          <TouchableOpacity style={styles.gridCard} onPress={() => { setSelectedTeam(item); setShowTeamDetailsModal(true); }}>
+            <View style={styles.gridCardHeader}>
+              <Ionicons name="people" size={28} color="#137fec" />
+              <TouchableOpacity onPress={() => handleTeamMenu(item)} style={{ padding: 4 }}>
+                <Ionicons name="ellipsis-horizontal" size={18} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.gridCardTitle} numberOfLines={2}>{item.name}</Text>
+            <View style={styles.gridCardFooter}>
+              <View style={[styles.gridStatusBadge, { backgroundColor: (item.archived ? '#6b7280' : '#10b981') + '20' }]}>
+                <Text style={[styles.gridStatusText, { color: item.archived ? '#6b7280' : '#10b981' }]}>{item.archived ? 'Archived' : 'Active'}</Text>
+              </View>
+              <Text style={styles.gridCardMembers}>{item.memberCount} members</Text>
+            </View>
+          </TouchableOpacity>
+        )}
         keyExtractor={(item) => item.id}
+        numColumns={viewMode === 'grid' ? 2 : 1}
+        columnWrapperStyle={viewMode === 'grid' ? styles.gridRow : undefined}
         style={styles.teamList}
-        contentContainerStyle={styles.teamListContent}
+        contentContainerStyle={viewMode === 'grid' ? styles.gridContainer : styles.teamListContent}
         showsVerticalScrollIndicator={false}
       />
 
@@ -469,6 +640,176 @@ const styles = StyleSheet.create({
   },
   memberCount: {
     fontSize: 14,
+    color: '#6b7280',
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    minHeight: 56,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    position: 'absolute',
+    left: 16,
+    right: 140,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#111827',
+  },
+  iconGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginLeft: 'auto',
+  },
+  iconButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  filterDropdown: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 12,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    zIndex: 1000,
+  },
+  filterHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  filterTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  filterItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  filterItemText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  statusPillsContainer: {
+    maxHeight: 60,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  statusPillsContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    gap: 6,
+  },
+  statusPillText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#6b7280',
+  },
+  statusBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  gridContainer: {
+    padding: 16,
+    paddingBottom: 100,
+  },
+  gridRow: {
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  gridCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    width: '48%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  gridCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  gridCardTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 10,
+    minHeight: 38,
+  },
+  gridCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  gridStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  gridStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  gridCardMembers: {
+    fontSize: 12,
     color: '#6b7280',
   },
 });

@@ -12,7 +12,7 @@ interface DashboardHeaderProps {
   onMenuPress: () => void;
   onNotificationsPress?: () => void;
   onProfilePress?: () => void;
-  title?: string;
+   title?: string;
   subtitle?: string;
 }
 
