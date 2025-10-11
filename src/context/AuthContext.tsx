@@ -117,6 +117,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login = async (user: User, token: string, refreshToken?: string) => {
     try {
       console.log('🔑 [LOGIN] Starting login process for user:', user.email);
+      console.log('🔑 [LOGIN] User object:', user);
       console.log('🔑 [LOGIN] User object keys:', Object.keys(user));
       console.log('🔑 [LOGIN] User has namespaceRoles?', !!(user as any).namespaceRoles);
       
@@ -124,10 +125,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       let hydratedUser = user as any;
       try { 
         console.log('🔑 [LOGIN] Attempting to hydrate namespaceRoles...');
+        console.log('🔑 [LOGIN] User data being sent to hydration:', {
+          username: user.name,
+          email: user.email,
+          id: (user as any).id
+        });
         hydratedUser = await hydrateNamespaceRoles(user as any); 
         console.log('🔑 [LOGIN] Hydration complete. User has namespaceRoles?', !!hydratedUser.namespaceRoles);
+        console.log('🔑 [LOGIN] Hydrated user object keys:', Object.keys(hydratedUser));
+        if (hydratedUser.namespaceRoles) {
+          console.log('🔑 [LOGIN] NamespaceRoles content:', JSON.stringify(hydratedUser.namespaceRoles, null, 2));
+        }
       } catch (e) {
-        console.log('🔑 [LOGIN] Hydration failed:', e);
+        console.log('❌ [LOGIN] Hydration failed with error:', e);
       }
 
       const storagePromises = [
@@ -247,19 +257,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Fetch and merge namespaceRoles for the current user from brmh-users
   async function hydrateNamespaceRoles(user: any): Promise<any> {
     try {
+      console.log('🔄 [HYDRATE] ==========================================');
       console.log('🔄 [HYDRATE] Starting hydration for user:', {
         username: user.username,
         name: user.name,
-        email: user.email
+        email: user.email,
+        id: user.id,
+        allKeys: Object.keys(user)
       });
       
       const res = await apiService.getUsers();
-      console.log('📡 [HYDRATE] API response:', { success: res.success, dataIsArray: Array.isArray(res.data), dataLength: res.data?.length });
+      console.log('📡 [HYDRATE] API response:', { 
+        success: res.success, 
+        dataIsArray: Array.isArray(res.data), 
+        dataLength: res.data?.length,
+        error: res.error
+      });
       
       if (!res.success || !Array.isArray(res.data)) {
         console.log('❌ [HYDRATE] Failed to get users from API');
+        console.log('❌ [HYDRATE] Response error:', res.error);
+        console.log('❌ [HYDRATE] Response data:', res.data);
         return user;
       }
+      
+      console.log('✅ [HYDRATE] Successfully fetched', res.data.length, 'users from API');
       
       // Log first user from API for debugging
       if (res.data.length > 0) {
@@ -279,13 +301,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.log('🔍 [HYDRATE] Looking for match with:', { uname, email, id, cognito });
       
       // Log all users to see what we're comparing against
-      console.log('🔍 [HYDRATE] Available users in DB:', res.data.map((u: any) => ({
-        username: u.username,
-        email: u.email,
-        cognitoUsername: u.cognitoUsername
-      })));
+      console.log('🔍 [HYDRATE] Available users in DB (' + res.data.length + ' users):');
+      res.data.forEach((u: any, index: number) => {
+        console.log(`  User ${index + 1}:`, {
+          username: u.username,
+          email: u.email,
+          cognitoUsername: u.cognitoUsername,
+          hasNamespaceRoles: !!u.namespaceRoles
+        });
+      });
       
       const match = res.data.find((u: any) => {
+        // Exact matches
         const usernameMatch = u.username && String(u.username).trim() === uname;
         const nameMatch = u.name && String(u.name).trim() === uname;
         const emailMatch = u.email && String(u.email).trim().toLowerCase() === email;
@@ -293,18 +320,40 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const userIdMatch = u.userId && id && u.userId === id;
         const cognitoMatch = cognito && (u.cognitoUsername === cognito || u.cognito_user === cognito);
         
-        if (usernameMatch || nameMatch || emailMatch || idMatch || userIdMatch || cognitoMatch) {
-          console.log('✅ [HYDRATE] Match found by:', {
-            usernameMatch, nameMatch, emailMatch, idMatch, userIdMatch, cognitoMatch
+        // Flexible matches - email prefix or username contains
+        const emailPrefix = email.split('@')[0]; // e.g., "adityabot69" from "adityabot69@gmail.com"
+        const dbEmailPrefix = u.email ? String(u.email).split('@')[0].toLowerCase() : '';
+        const emailPrefixMatch = emailPrefix && dbEmailPrefix && emailPrefix === dbEmailPrefix;
+        
+        // Check if username/cognitoUsername starts with the login username (case insensitive)
+        const usernameStartsWith = u.username && uname && 
+          String(u.username).toLowerCase().replace(/[_\s]/g, '').startsWith(uname.toLowerCase().replace(/[_\s]/g, ''));
+        const cognitoStartsWith = u.cognitoUsername && uname && 
+          String(u.cognitoUsername).toLowerCase().replace(/[_\s]/g, '').startsWith(uname.toLowerCase().replace(/[_\s]/g, ''));
+        
+        if (usernameMatch || nameMatch || emailMatch || idMatch || userIdMatch || cognitoMatch || emailPrefixMatch || usernameStartsWith || cognitoStartsWith) {
+          console.log('✅ [HYDRATE] Match found for:', {
+            dbUser: { username: u.username, email: u.email, cognitoUsername: u.cognitoUsername },
+            matchedBy: {
+              usernameMatch, nameMatch, emailMatch, idMatch, userIdMatch, cognitoMatch,
+              emailPrefixMatch, usernameStartsWith, cognitoStartsWith
+            }
           });
         }
         
-        return usernameMatch || nameMatch || emailMatch || idMatch || userIdMatch || cognitoMatch;
+        // Prioritize exact email match first, then other matches
+        return emailMatch || emailPrefixMatch || usernameMatch || nameMatch || idMatch || userIdMatch || cognitoMatch || usernameStartsWith || cognitoStartsWith;
       });
       
       if (!match) {
-        console.log('❌ [HYDRATE] No matching user found in database');
-        console.log('❌ [HYDRATE] Tried to match:', { uname, email, id, cognito });
+        console.log('❌ [HYDRATE] ==========================================');
+        console.log('❌ [HYDRATE] NO MATCHING USER FOUND IN DATABASE!');
+        console.log('❌ [HYDRATE] Tried to match with:');
+        console.log('  - uname:', uname);
+        console.log('  - email:', email);
+        console.log('  - id:', id);
+        console.log('  - cognito:', cognito);
+        console.log('❌ [HYDRATE] ==========================================');
         return user;
       }
       
@@ -316,9 +365,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       let roles = match.namespaceRoles || (match.metadata && match.metadata.namespaceRoles);
       console.log('📦 [HYDRATE] Raw namespaceRoles type:', typeof roles);
-      console.log('📦 [HYDRATE] Raw namespaceRoles (first 200 chars):', 
-        typeof roles === 'string' ? roles.substring(0, 200) : JSON.stringify(roles).substring(0, 200)
-      );
+      console.log('📦 [HYDRATE] Raw namespaceRoles value:', roles);
+      if (roles) {
+        console.log('📦 [HYDRATE] Raw namespaceRoles (first 200 chars):', 
+          typeof roles === 'string' ? roles.substring(0, 200) : JSON.stringify(roles).substring(0, 200)
+        );
+      } else {
+        console.log('❌ [HYDRATE] namespaceRoles is NULL/UNDEFINED in database!');
+        console.log('📦 [HYDRATE] Match object keys:', Object.keys(match));
+        console.log('📦 [HYDRATE] Full match object:', JSON.stringify(match, null, 2));
+      }
       
       // Parse roles if it is a JSON string
       if (typeof roles === 'string') { 
@@ -350,10 +406,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const merged = { ...user } as any;
       merged.namespaceRoles = roles;
       
-      console.log('✅ [HYDRATE] Hydration complete. User now has namespaceRoles.');
+      console.log('✅✅✅ [HYDRATE] HYDRATION COMPLETE! User now has namespaceRoles.');
+      console.log('✅✅✅ [HYDRATE] Merged user keys:', Object.keys(merged));
+      console.log('✅✅✅ [HYDRATE] Has namespaceRoles?', !!merged.namespaceRoles);
+      console.log('🔄 [HYDRATE] ==========================================');
       return merged;
     } catch (error) {
-      console.log('❌ [HYDRATE] Error during hydration:', error);
+      console.log('❌❌❌ [HYDRATE] ERROR during hydration:', error);
+      console.log('❌ [HYDRATE] Error stack:', error instanceof Error ? error.stack : 'N/A');
+      console.log('🔄 [HYDRATE] ==========================================');
       return user;
     }
   }
@@ -361,9 +422,124 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Role derivation from namespaceRoles; default 'user'
   function deriveRole(user: User | null): 'admin' | 'manager' | 'user' {
     if (!user) return 'user';
+    
+    console.log('🔍 [DERIVE_ROLE] Starting role derivation for user:', {
+      username: (user as any).username || (user as any).name,
+      email: (user as any).email,
+      hasNamespaceRoles: !!(user as any).namespaceRoles
+    });
+    
+    // Check if user is admin in either 'localhost' or 'projectmanagement' namespace
+    const namespacesToCheck = ['localhost', 'projectmanagement'];
+    const u: any = user;
+    let nr: any = u.namespaceRoles || (u.metadata && u.metadata.namespaceRoles) || null;
+    
+    // Parse if stored as JSON string
+    if (typeof nr === 'string') {
+      try { 
+        nr = JSON.parse(nr);
+        console.log('🔍 [DERIVE_ROLE] Parsed namespaceRoles from JSON string');
+      } catch (e) { 
+        console.log('🔍 [DERIVE_ROLE] Failed to parse JSON string:', e);
+      }
+    }
+    
+    if (nr && typeof nr === 'object' && nr !== null) {
+      console.log('🔍 [DERIVE_ROLE] NamespaceRoles available, checking namespaces...');
+      
+      // Unwrap DynamoDB M wrapper if present
+      const base = (nr as any)?.M && typeof (nr as any).M === 'object' ? (nr as any).M : nr;
+      console.log('🔍 [DERIVE_ROLE] Available namespaces:', Object.keys(base));
+      
+      // Check both localhost and projectmanagement namespaces for admin role
+      for (const namespace of namespacesToCheck) {
+        const node = base[namespace];
+        
+        if (node) {
+          console.log(`🔍 [DERIVE_ROLE] Checking namespace: ${namespace}`);
+          
+          let role: string | undefined;
+          
+          // Try strict Dynamo form first
+          if (node?.M?.role?.S) {
+            role = node.M.role.S;
+            console.log(`🔍 [DERIVE_ROLE] Found role (DynamoDB format) in ${namespace}: ${role}`);
+          }
+          // Try plain form
+          else if (node?.role) {
+            role = node.role;
+            console.log(`🔍 [DERIVE_ROLE] Found role (plain format) in ${namespace}: ${role}`);
+          }
+          
+          // If admin role found in this namespace, return admin immediately
+          if (role === 'admin') {
+            console.log(`✅ [DERIVE_ROLE] User is ADMIN in ${namespace} namespace`);
+            return 'admin';
+          }
+          
+          // Check for manager role (lower priority than admin)
+          if (role === 'manager') {
+            console.log(`✅ [DERIVE_ROLE] User is MANAGER in ${namespace} namespace`);
+            // Don't return yet, continue checking for admin in other namespaces
+          }
+          
+          // Infer from permissions if role missing
+          const permsDyn = node?.M?.permissions?.L?.map((p: any) => p?.S).filter(Boolean) || [];
+          const permsPlain = Array.isArray(node?.permissions) ? node.permissions : [];
+          const perms = (permsDyn.length ? permsDyn : permsPlain) as string[];
+          
+          if (perms.length > 0) {
+            console.log(`🔍 [DERIVE_ROLE] Permissions in ${namespace}:`, perms);
+            
+            if (perms.includes('crud:all') && perms.includes('assign:users')) {
+              console.log(`✅ [DERIVE_ROLE] User has ADMIN permissions in ${namespace} namespace`);
+              return 'admin';
+            }
+            else if (perms.includes('crud:all')) {
+              console.log(`✅ [DERIVE_ROLE] User has MANAGER permissions in ${namespace} namespace`);
+              // Don't return yet, continue checking for admin in other namespaces
+            }
+          }
+        }
+      }
+    }
+    
+    // Check for manager role after checking all namespaces for admin
+    if (nr && typeof nr === 'object' && nr !== null) {
+      const base = (nr as any)?.M && typeof (nr as any).M === 'object' ? (nr as any).M : nr;
+      for (const namespace of namespacesToCheck) {
+        const node = base[namespace];
+        if (node) {
+          let role: string | undefined;
+          if (node?.M?.role?.S) role = node.M.role.S;
+          else if (node?.role) role = node.role;
+          
+          if (role === 'manager') {
+            console.log(`✅ [DERIVE_ROLE] User is MANAGER in ${namespace} namespace (final)`);
+            return 'manager';
+          }
+          
+          // Check permissions for manager
+          const permsDyn = node?.M?.permissions?.L?.map((p: any) => p?.S).filter(Boolean) || [];
+          const permsPlain = Array.isArray(node?.permissions) ? node.permissions : [];
+          const perms = (permsDyn.length ? permsDyn : permsPlain) as string[];
+          
+          if (perms.includes('crud:all')) {
+            console.log(`✅ [DERIVE_ROLE] User has MANAGER permissions in ${namespace} namespace (final)`);
+            return 'manager';
+          }
+        }
+      }
+    }
+    
     // Fallback to user.role if present
     const r = (user as any).role;
-    if (r === 'admin' || r === 'manager' || r === 'user') return r;
+    if (r === 'admin' || r === 'manager' || r === 'user') {
+      console.log('🔍 [DERIVE_ROLE] Using fallback role from user.role:', r);
+      return r;
+    }
+    
+    console.log('🔍 [DERIVE_ROLE] No admin/manager role found, defaulting to user');
     return 'user';
   }
 

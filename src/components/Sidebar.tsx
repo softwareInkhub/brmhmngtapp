@@ -81,7 +81,7 @@ const Sidebar: React.FC<SidebarProps> = ({ visible, onClose }) => {
     logout();
   };
 
-  const handleDebugRoleInfo = () => {
+  const handleDebugRoleInfo = async () => {
     const u: any = user || {};
     const debugInfo = {
       username: u.username || u.name || 'N/A',
@@ -92,7 +92,14 @@ const Sidebar: React.FC<SidebarProps> = ({ visible, onClose }) => {
       rawNamespaceRoles: u.namespaceRoles ? JSON.stringify(u.namespaceRoles, null, 2) : 'null'
     };
     
-    console.log('🐛 [DEBUG] Full role info:', debugInfo);
+    console.log('🐛 [DEBUG] ==========================================');
+    console.log('🐛 [DEBUG] BEFORE refresh - Full role info:', debugInfo);
+    console.log('🐛 [DEBUG] Now forcing refresh from database...');
+    
+    await refreshNamespaceRoles();
+    
+    console.log('🐛 [DEBUG] Refresh complete! Check logs above.');
+    console.log('🐛 [DEBUG] ==========================================');
     
     Alert.alert(
       '🐛 Debug Role Info',

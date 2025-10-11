@@ -63,51 +63,42 @@ const base64Decode = (str: string): string => {
 
 // Helper function to convert DynamoDB format to plain object
 const convertDynamoDBItem = (item: any): any => {
-  console.log('convertDynamoDBItem - Input item:', item);
-  
   if (!item || typeof item !== 'object') {
-    console.log('convertDynamoDBItem - Not an object, returning as-is:', item);
     return item;
   }
   
   const converted: any = {};
   
   for (const [key, value] of Object.entries(item)) {
-    console.log(`convertDynamoDBItem - Processing key "${key}" with value:`, value);
-    
     if (value && typeof value === 'object') {
       if ('S' in value) {
         // String value
         converted[key] = (value as any).S;
-        console.log(`convertDynamoDBItem - Converted "${key}" from string: "${(value as any).S}"`);
       } else if ('N' in value) {
         // Number value
         converted[key] = parseFloat((value as any).N as string);
-        console.log(`convertDynamoDBItem - Converted "${key}" from number: ${converted[key]}`);
       } else if ('BOOL' in value) {
         // Boolean value
         converted[key] = (value as any).BOOL;
-        console.log(`convertDynamoDBItem - Converted "${key}" from boolean: ${converted[key]}`);
       } else if ('NULL' in value) {
         // Null value
         converted[key] = null;
-        console.log(`convertDynamoDBItem - Converted "${key}" from null`);
       } else if ('L' in value) {
         // List value
         converted[key] = ((value as any).L as any[]).map((item: any) => convertDynamoDBItem(item));
-        console.log(`convertDynamoDBItem - Converted "${key}" from list`);
       } else if ('M' in value) {
         // Map value
         converted[key] = convertDynamoDBItem((value as any).M);
-        console.log(`convertDynamoDBItem - Converted "${key}" from map`);
+      } else {
+        // Plain object/value (not in DynamoDB format) - preserve as-is
+        // This is important for fields like namespaceRoles that come as plain objects
+        converted[key] = value;
       }
     } else {
       converted[key] = value;
-      console.log(`convertDynamoDBItem - Kept "${key}" as-is:`, value);
     }
   }
   
-  console.log('convertDynamoDBItem - Final converted object:', converted);
   return converted;
 };
 
@@ -740,8 +731,13 @@ class ApiService {
   // Users listing from DynamoDB (brmh-users)
   async getUsers(): Promise<ApiResponse<any[]>> {
     try {
+      console.log('👥 [API] Fetching users from table:', AUTH_TABLE_NAME);
       const response = await this.makeRequest<any>(`?tableName=${AUTH_TABLE_NAME}`, { method: 'GET' });
-      if (!response.success) return response;
+      
+      if (!response.success) {
+        console.log('❌ [API] Failed to fetch users:', response.error);
+        return response;
+      }
 
       let raw: any[] = [];
       if (Array.isArray(response.data)) raw = response.data;
@@ -749,9 +745,45 @@ class ApiService {
       else if (response.data?.data) raw = response.data.data;
       else if (response.data?.results) raw = response.data.results;
 
+      console.log('👥 [API] Raw users fetched:', raw.length);
+      
+      // Log raw data for Aditya_Kumar before conversion
+      const adityaRaw = raw.find((u: any) => {
+        const email = u.email?.S || u.email;
+        return email === 'adityabot69@gmail.com';
+      });
+      if (adityaRaw) {
+        console.log('👥 [API] RAW Aditya_Kumar BEFORE conversion:');
+        console.log('  - Keys:', Object.keys(adityaRaw));
+        console.log('  - Has namespaceRoles key?', 'namespaceRoles' in adityaRaw);
+        console.log('  - namespaceRoles value:', adityaRaw.namespaceRoles);
+      }
+      
       const users = raw.map((u: any) => convertDynamoDBItem(u));
+      
+      console.log('👥 [API] Converted users:', users.length);
+      
+      // Log converted data for Aditya_Kumar
+      const adityaConverted = users.find((u: any) => u.email === 'adityabot69@gmail.com');
+      if (adityaConverted) {
+        console.log('👥 [API] CONVERTED Aditya_Kumar AFTER conversion:');
+        console.log('  - Keys:', Object.keys(adityaConverted));
+        console.log('  - Has namespaceRoles key?', 'namespaceRoles' in adityaConverted);
+        console.log('  - namespaceRoles value:', adityaConverted.namespaceRoles);
+        console.log('  - namespaceRoles type:', typeof adityaConverted.namespaceRoles);
+      }
+      
+      console.log('👥 [API] Sample user (first):', users.length > 0 ? {
+        username: users[0].username,
+        email: users[0].email,
+        hasNamespaceRoles: !!users[0].namespaceRoles,
+        namespaceRolesType: typeof users[0].namespaceRoles,
+        namespaceRolesLength: typeof users[0].namespaceRoles === 'string' ? users[0].namespaceRoles.length : 'N/A'
+      } : 'No users');
+      
       return { success: true, data: users };
     } catch (e) {
+      console.log('❌ [API] Error fetching users:', e);
       return { success: false, error: 'Failed to fetch users' };
     }
   }
