@@ -254,7 +254,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
               )}
             </TouchableOpacity>
             {showParentMenu && (
-              <View style={[styles.selectMenu, { zIndex: 10000, elevation: 30, maxHeight: 320, position: 'absolute' }]}> 
+              <View style={[styles.selectMenu, { zIndex: 10000, elevation: 30, maxHeight: 280, position: 'absolute' }]}> 
                 <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: 'white' }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
                     <Ionicons name="search" size={14} color="#9ca3af" />
@@ -268,9 +268,12 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
                   </View>
                 </View>
                 <ScrollView
-                  keyboardShouldPersistTaps="handled"
+                  keyboardShouldPersistTaps="always"
                   nestedScrollEnabled
+                  scrollEnabled
                   showsVerticalScrollIndicator
+                  onStartShouldSetResponderCapture={() => true}
+                  onMoveShouldSetResponderCapture={() => true}
                   style={{ maxHeight: 260 }}
                   contentContainerStyle={{ paddingBottom: 8 }}
                 >
@@ -566,9 +569,13 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
                 </View>
               </View>
               <ScrollView
-                keyboardShouldPersistTaps="handled"
+                keyboardShouldPersistTaps="always"
                 nestedScrollEnabled
-                style={{ maxHeight: 220 }}
+                scrollEnabled
+                showsVerticalScrollIndicator
+                onStartShouldSetResponderCapture={() => true}
+                onMoveShouldSetResponderCapture={() => true}
+                style={{ maxHeight: 260 }}
                 contentContainerStyle={{ paddingBottom: 8 }}
               >
                 {(projects || [])
@@ -681,6 +688,7 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
     paddingTop: 16,
+    overflow: 'visible',
   },
   inputGroup: {
     marginBottom: 20,
@@ -737,17 +745,19 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOpacity: 0.06,
     shadowRadius: 6,
-    elevation: 3,
+    elevation: 30,
     overflow: 'hidden',
-    zIndex: 4000,
+    zIndex: 12000,
   },
   dropdownContainer: {
     position: 'relative',
-    zIndex: 3500,
+    zIndex: 11000,
+    overflow: 'visible',
   },
   dropdownWrapper: {
-    zIndex: 3000,
-    elevation: 24,
+    zIndex: 11500,
+    elevation: 28,
+    overflow: 'visible',
   },
   dateCol: {
     zIndex: 0,

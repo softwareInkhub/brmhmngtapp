@@ -1,11 +1,23 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Dimensions, TextInput, Modal, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Dimensions, TextInput, Modal, ScrollView, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import ProfileHeader from '../components/ProfileHeader';
 import { useAuth } from '../context/AuthContext';
 import Sidebar from '../components/Sidebar';
 import { apiService } from '../services/api';
+
+// Optional dependency to avoid type errors if not installed
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const DateTimePicker: any = (() => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require('@react-native-community/datetimepicker');
+    return mod.default || mod;
+  } catch {
+    return null;
+  }
+})();
 
 const { width } = Dimensions.get('window');
 
@@ -24,7 +36,7 @@ const ProjectsScreen = ({ navigation }: any) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditingProject, setIsEditingProject] = useState(false);
   const [editProjectForm, setEditProjectForm] = useState<any>({});
-  const [form, setForm] = useState({
+  const initialProjectForm = {
     name: '',
     description: '',
     company: '',
@@ -36,10 +48,29 @@ const ProjectsScreen = ({ navigation }: any) => {
     team: '',
     assignee: '',
     progress: '0',
-    tasks: '[]',
     tags: '[]',
-    notes: '',
-  });
+  };
+  const [form, setForm] = useState(initialProjectForm);
+
+  // Dropdown/Picker UI state for Create Project form
+  const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const [showPriorityMenu, setShowPriorityMenu] = useState(false);
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
+  const [showTeamMenu, setShowTeamMenu] = useState(false);
+  const [teamSearch, setTeamSearch] = useState('');
+  const [teams, setTeams] = useState<any[]>([]);
+  const [showAssigneeMenu, setShowAssigneeMenu] = useState(false);
+  const [assigneeSearch, setAssigneeSearch] = useState('');
+  const [users, setUsers] = useState<any[]>([]);
+
+  const resetCreateProjectUI = () => {
+    setForm(initialProjectForm);
+    setShowStatusMenu(false);
+    setShowPriorityMenu(false);
+    setShowStartPicker(false);
+    setShowEndPicker(false);
+  };
 
   const setField = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -65,15 +96,14 @@ const ProjectsScreen = ({ navigation }: any) => {
       team: form.team,
       assignee: form.assignee,
       progress: Math.max(0, Math.min(100, Number(form.progress) || 0)),
-      tasks: form.tasks?.trim() || '[]',
       tags: form.tags?.trim() || '[]',
-      notes: form.notes,
     } as any;
 
     const res = await apiService.createProject(payload);
     setIsSubmitting(false);
     if (res.success) {
       setShowCreateProjectModal(false);
+      resetCreateProjectUI();
       await fetchProjects();
     } else {
       alert(res.error || 'Failed to create project');
@@ -90,6 +120,24 @@ const ProjectsScreen = ({ navigation }: any) => {
   useEffect(() => {
     fetchProjects();
   }, []);
+
+  // Fetch teams when opening create modal
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (showCreateProjectModal) {
+        const res = await apiService.getTeams();
+        if (mounted && res.success && res.data) {
+          try { setTeams(res.data as any[]); } catch { setTeams([]); }
+        }
+        const u = await apiService.getUsers();
+        if (mounted && u.success && u.data) {
+          try { setUsers(u.data as any[]); } catch { setUsers([]); }
+        }
+      }
+    })();
+    return () => { mounted = false; };
+  }, [showCreateProjectModal]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -201,6 +249,7 @@ const ProjectsScreen = ({ navigation }: any) => {
         })()}
         onRightElementPress={() => {
           if (!hasPermission('projectmanagement','crud')) return;
+          resetCreateProjectUI();
           setShowCreateProjectModal(true);
         }}
         onMenuPress={() => setSidebarVisible(true)}
@@ -601,7 +650,7 @@ const ProjectsScreen = ({ navigation }: any) => {
         visible={showCreateProjectModal}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowCreateProjectModal(false)}
+        onRequestClose={() => { setShowCreateProjectModal(false); resetCreateProjectUI(); }}
       >
         <View style={styles.projectDetailsBackdrop}>
           <TouchableOpacity 
@@ -612,7 +661,7 @@ const ProjectsScreen = ({ navigation }: any) => {
           <View style={styles.projectDetailsModal}>
             <View style={styles.projectDetailsHeader}>
               <Text style={styles.projectDetailsTitle}>Create Project</Text>
-              <TouchableOpacity onPress={() => setShowCreateProjectModal(false)}>
+              <TouchableOpacity onPress={() => { setShowCreateProjectModal(false); resetCreateProjectUI(); }}>
                 <Ionicons name="close" size={24} color="#6b7280" />
               </TouchableOpacity>
             </View>
@@ -623,24 +672,277 @@ const ProjectsScreen = ({ navigation }: any) => {
                 <ProjectField label="Description" value={form.description} onChange={(t: string) => setField('description', t)} placeholder="Optional description" multiline />
                 <ProjectField label="Company *" value={form.company} onChange={(t: string) => setField('company', t)} placeholder="company-id-123" />
                 <View style={{ flexDirection: 'row', gap: 12 }}>
-                  <ProjectField label="Status *" value={form.status} onChange={(t: string) => setField('status', t)} placeholder="Planning / Active / Completed / On Hold" style={{ flex: 1 }} />
-                  <ProjectField label="Priority *" value={form.priority} onChange={(t: string) => setField('priority', t)} placeholder="Low / Medium / High" style={{ flex: 1 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>Status *</Text>
+                    <View style={styles.dropdownContainer}>
+                      <TouchableOpacity
+                        style={styles.select}
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setShowStatusMenu(prev => !prev);
+                          setShowPriorityMenu(false);
+                          setShowStartPicker(false);
+                          setShowEndPicker(false);
+                        }}
+                      >
+                        <Text style={styles.selectText}>{form.status}</Text>
+                        <Ionicons name={showStatusMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
+                      </TouchableOpacity>
+                      {showStatusMenu && (
+                        <View style={[styles.selectMenu, { zIndex: 10000, elevation: 30, maxHeight: 240 }]}> 
+                          {['Planning','Active','Completed','On Hold'].map(s => (
+                            <TouchableOpacity
+                              key={s}
+                              style={styles.selectOption}
+                              onPress={() => { setField('status', s); setShowStatusMenu(false); }}
+                            >
+                              <Text style={styles.selectOptionText}>{s}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>Priority *</Text>
+                    <View style={styles.dropdownContainer}>
+                      <TouchableOpacity
+                        style={styles.select}
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setShowPriorityMenu(prev => !prev);
+                          setShowStatusMenu(false);
+                          setShowStartPicker(false);
+                          setShowEndPicker(false);
+                        }}
+                      >
+                        <Text style={styles.selectText}>{form.priority}</Text>
+                        <Ionicons name={showPriorityMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
+                      </TouchableOpacity>
+                      {showPriorityMenu && (
+                        <View style={[styles.selectMenu, { zIndex: 10000, elevation: 30, maxHeight: 240 }]}> 
+                          {['Low','Medium','High'].map(p => (
+                            <TouchableOpacity
+                              key={p}
+                              style={styles.selectOption}
+                              onPress={() => { setField('priority', p); setShowPriorityMenu(false); }}
+                            >
+                              <Text style={styles.selectOptionText}>{p}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  </View>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 12 }}>
-                  <ProjectField label="Start Date *" value={form.startDate} onChange={(t: string) => setField('startDate', t)} placeholder="YYYY-MM-DD" style={{ flex: 1 }} />
-                  <ProjectField label="End Date *" value={form.endDate} onChange={(t: string) => setField('endDate', t)} placeholder="YYYY-MM-DD" style={{ flex: 1 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>Start Date *</Text>
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        if (!DateTimePicker) {
+                          Alert.alert('Date picker unavailable', 'This requires @react-native-community/datetimepicker. On web the calendar will not open.');
+                          return;
+                        }
+                        setShowStartPicker(true);
+                        setShowEndPicker(false);
+                        setShowStatusMenu(false);
+                        setShowPriorityMenu(false);
+                      }}
+                    >
+                      <View style={[styles.select, styles.dateButton]}>
+                        <Text style={styles.selectText}>{form.startDate || 'YYYY-MM-DD'}</Text>
+                        <Ionicons name="calendar-outline" size={18} color="#6b7280" />
+                      </View>
+                    </TouchableOpacity>
+                    {showStartPicker && DateTimePicker && (
+                      <DateTimePicker
+                        value={form.startDate ? new Date(form.startDate) : new Date()}
+                        mode="date"
+                        display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                        onChange={(event: any, date: any) => {
+                          if (Platform.OS !== 'ios') setShowStartPicker(false);
+                          if (date) {
+                            const iso = date.toISOString().split('T')[0];
+                            setField('startDate', iso);
+                          }
+                        }}
+                        style={Platform.OS === 'ios' ? { alignSelf: 'flex-start' } : undefined}
+                      />
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>End Date *</Text>
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        if (!DateTimePicker) {
+                          Alert.alert('Date picker unavailable', 'This requires @react-native-community/datetimepicker. On web the calendar will not open.');
+                          return;
+                        }
+                        setShowEndPicker(true);
+                        setShowStartPicker(false);
+                        setShowStatusMenu(false);
+                        setShowPriorityMenu(false);
+                      }}
+                    >
+                      <View style={[styles.select, styles.dateButton]}>
+                        <Text style={styles.selectText}>{form.endDate || 'YYYY-MM-DD'}</Text>
+                        <Ionicons name="calendar-outline" size={18} color="#6b7280" />
+                      </View>
+                    </TouchableOpacity>
+                    {showEndPicker && DateTimePicker && (
+                      <DateTimePicker
+                        value={form.endDate ? new Date(form.endDate) : new Date()}
+                        mode="date"
+                        display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                        onChange={(event: any, date: any) => {
+                          if (Platform.OS !== 'ios') setShowEndPicker(false);
+                          if (date) {
+                            const iso = date.toISOString().split('T')[0];
+                            setField('endDate', iso);
+                          }
+                        }}
+                        style={Platform.OS === 'ios' ? { alignSelf: 'flex-start' } : undefined}
+                      />
+                    )}
+                  </View>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 12 }}>
                   <ProjectField label="Budget *" value={form.budget} onChange={(t: string) => setField('budget', t)} placeholder="50000" style={{ flex: 1 }} />
                   <ProjectField label="Progress *" value={form.progress} onChange={(t: string) => setField('progress', t)} placeholder="0-100" style={{ flex: 1 }} />
                 </View>
                 <View style={{ flexDirection: 'row', gap: 12 }}>
-                  <ProjectField label="Team *" value={form.team} onChange={(t: string) => setField('team', t)} placeholder="team-id-456" style={{ flex: 1 }} />
-                  <ProjectField label="Assignee *" value={form.assignee} onChange={(t: string) => setField('assignee', t)} placeholder="user-id-789" style={{ flex: 1 }} />
+                  {/* Team dropdown (fetched from DB) */}
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>Team *</Text>
+                    <View style={styles.dropdownContainer}>
+                      <TouchableOpacity
+                        style={styles.select}
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setShowTeamMenu(prev => !prev);
+                          // close others
+                          setShowStatusMenu(false);
+                          setShowPriorityMenu(false);
+                          setShowStartPicker(false);
+                          setShowEndPicker(false);
+                        }}
+                      >
+                        <Text style={styles.selectText} numberOfLines={1}>{form.team || 'Select team'}</Text>
+                        <Ionicons name={showTeamMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
+                      </TouchableOpacity>
+                      {showTeamMenu && (
+                        <View style={[styles.selectMenu, { zIndex: 10000, elevation: 30, maxHeight: 280 }]}> 
+                          <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: 'white' }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+                              <Ionicons name="search" size={14} color="#9ca3af" />
+                              <TextInput
+                                value={teamSearch}
+                                onChangeText={setTeamSearch}
+                                placeholder="Search teams"
+                                placeholderTextColor="#9ca3af"
+                                style={{ marginLeft: 6, flex: 1, color: '#111827', paddingVertical: 0 }}
+                              />
+                            </View>
+                          </View>
+                          <ScrollView
+                            keyboardShouldPersistTaps="always"
+                            nestedScrollEnabled
+                            scrollEnabled
+                            showsVerticalScrollIndicator
+                            onStartShouldSetResponderCapture={() => true}
+                            onMoveShouldSetResponderCapture={() => true}
+                            style={{ maxHeight: 220 }}
+                            contentContainerStyle={{ paddingBottom: 8 }}
+                          >
+                            {(teams || [])
+                              .filter(t => !teamSearch.trim() || (t.name || t.title || '').toLowerCase().includes(teamSearch.toLowerCase()))
+                              .map((item, idx) => (
+                                <TouchableOpacity
+                                  key={item.id || item.teamId || item.name || String(idx)}
+                                  style={styles.selectOption}
+                                  onPress={() => {
+                                    setField('team', item.name || item.title || item.id || '');
+                                    setShowTeamMenu(false);
+                                  }}
+                                >
+                                  <Text style={styles.selectOptionText} numberOfLines={1}>{item.name || item.title || '-'}</Text>
+                                </TouchableOpacity>
+                              ))}
+                          </ScrollView>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                  {/* Assignee dropdown (fetched users) */}
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>Assignee *</Text>
+                    <View style={styles.dropdownContainer}>
+                      <TouchableOpacity
+                        style={styles.select}
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setShowAssigneeMenu(prev => !prev);
+                          // close others
+                          setShowTeamMenu(false);
+                          setShowStatusMenu(false);
+                          setShowPriorityMenu(false);
+                          setShowStartPicker(false);
+                          setShowEndPicker(false);
+                        }}
+                      >
+                        <Text style={styles.selectText} numberOfLines={1}>{form.assignee || 'Select assignee'}</Text>
+                        <Ionicons name={showAssigneeMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
+                      </TouchableOpacity>
+                      {showAssigneeMenu && (
+                        <View style={[styles.selectMenu, { zIndex: 10000, elevation: 30, maxHeight: 280 }]}> 
+                          <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: 'white' }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+                              <Ionicons name="search" size={14} color="#9ca3af" />
+                              <TextInput
+                                value={assigneeSearch}
+                                onChangeText={setAssigneeSearch}
+                                placeholder="Search users"
+                                placeholderTextColor="#9ca3af"
+                                style={{ marginLeft: 6, flex: 1, color: '#111827', paddingVertical: 0 }}
+                              />
+                            </View>
+                          </View>
+                          <ScrollView
+                            keyboardShouldPersistTaps="always"
+                            nestedScrollEnabled
+                            scrollEnabled
+                            showsVerticalScrollIndicator
+                            onStartShouldSetResponderCapture={() => true}
+                            onMoveShouldSetResponderCapture={() => true}
+                            style={{ maxHeight: 220 }}
+                            contentContainerStyle={{ paddingBottom: 8 }}
+                          >
+                            {(users || [])
+                              .filter(u => !assigneeSearch.trim() || ((u.name || u.username || u.email || '').toLowerCase().includes(assigneeSearch.toLowerCase())))
+                              .map((item, idx) => (
+                                <TouchableOpacity
+                                  key={item.id || item.userId || item.username || item.email || String(idx)}
+                                  style={styles.selectOption}
+                                  onPress={() => {
+                                    setField('assignee', item.name || item.username || item.email || item.id || '');
+                                    setShowAssigneeMenu(false);
+                                  }}
+                                >
+                                  <Text style={styles.selectOptionText} numberOfLines={1}>{item.name || item.username || item.email || '-'}</Text>
+                                </TouchableOpacity>
+                              ))}
+                          </ScrollView>
+                        </View>
+                      )}
+                    </View>
+                  </View>
                 </View>
-                <ProjectField label="Tasks (JSON) *" value={form.tasks} onChange={(t: string) => setField('tasks', t)} placeholder='["id1","id2"] or []' />
+                {/* Tasks field removed as requested */}
                 <ProjectField label="Tags (JSON) *" value={form.tags} onChange={(t: string) => setField('tags', t)} placeholder='["web","frontend"]' />
-                <ProjectField label="Notes" value={form.notes} onChange={(t: string) => setField('notes', t)} placeholder="Optional notes" />
+                {/* Notes field removed as requested */}
 
                 <TouchableOpacity style={styles.submitBtn} disabled={isSubmitting} onPress={submit}>
                   {isSubmitting ? (
@@ -726,6 +1028,55 @@ const styles = StyleSheet.create({
   projectDetailsContent: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  // Dropdown styles (aligned with CreateTaskForm)
+  dropdownContainer: {
+    position: 'relative',
+    zIndex: 3500,
+  },
+  select: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectText: {
+    fontSize: 14,
+    color: '#111827',
+  },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 3,
+    overflow: 'hidden',
+    zIndex: 4000,
+  },
+  selectOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  selectOptionText: {
+    fontSize: 14,
+    color: '#1f2937',
   },
   projectDetailsInfo: {
     paddingVertical: 16,
