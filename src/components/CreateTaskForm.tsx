@@ -39,6 +39,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
   const [showHourMenu, setShowHourMenu] = useState(false);
   const [showMinuteMenu, setShowMinuteMenu] = useState(false);
   const [showParentPicker, setShowParentPicker] = useState(false);
+  const [showParentMenu, setShowParentMenu] = useState(false);
   const [parentSearch, setParentSearch] = useState('');
   const [selectedParentId, setSelectedParentId] = useState<string | null>(parentTaskId || null);
   const [showProjectMenu, setShowProjectMenu] = useState(false);
@@ -224,22 +225,78 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
       {!parentTaskId && (
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Parent Task (optional)</Text>
-          <TouchableOpacity
-            style={[styles.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
-            activeOpacity={0.8}
-            onPress={() => setShowParentPicker(true)}
-          >
-            <Text style={styles.inputText} numberOfLines={1}>
-              {selectedParentId ? (state.tasks.find(t => t.id === selectedParentId)?.title || selectedParentId) : 'Select parent task'}
-            </Text>
-            {selectedParentId ? (
-              <TouchableOpacity onPress={() => setSelectedParentId(null)}>
-                <Ionicons name="close-circle" size={18} color="#6b7280" />
-              </TouchableOpacity>
-            ) : (
-              <Ionicons name="chevron-down" size={18} color="#6b7280" />
+          <View style={styles.dropdownContainer}>
+            <TouchableOpacity
+              style={[styles.select]}
+              activeOpacity={0.8}
+              onPress={() => {
+                setShowParentMenu(prev => !prev);
+                // Close others to avoid overlap
+                setShowPriorityMenu(false);
+                setShowStatusMenu(false);
+                setShowHourMenu(false);
+                setShowMinuteMenu(false);
+                setShowProjectMenu(false);
+                setShowDuePicker(false);
+                setShowStartPicker(false);
+                setShowParentPicker(false);
+              }}
+            >
+              <Text style={styles.selectText} numberOfLines={1}>
+                {selectedParentId ? (state.tasks.find(t => t.id === selectedParentId)?.title || selectedParentId) : 'Select parent task'}
+              </Text>
+              {selectedParentId ? (
+                <TouchableOpacity onPress={() => setSelectedParentId(null)}>
+                  <Ionicons name="close-circle" size={18} color="#6b7280" />
+                </TouchableOpacity>
+              ) : (
+                <Ionicons name={showParentMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
+              )}
+            </TouchableOpacity>
+            {showParentMenu && (
+              <View style={[styles.selectMenu, { zIndex: 10000, elevation: 30, maxHeight: 320, position: 'absolute' }]}> 
+                <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: 'white' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+                    <Ionicons name="search" size={14} color="#9ca3af" />
+                    <TextInput
+                      value={parentSearch}
+                      onChangeText={setParentSearch}
+                      placeholder="Search tasks..."
+                      placeholderTextColor="#9ca3af"
+                      style={{ marginLeft: 6, flex: 1, color: '#111827', paddingVertical: 0 }}
+                    />
+                  </View>
+                </View>
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator
+                  style={{ maxHeight: 260 }}
+                  contentContainerStyle={{ paddingBottom: 8 }}
+                >
+                  {state.tasks
+                    .filter(t => !t.parentId)
+                    .filter(t => !parentSearch.trim() || (t.title || '').toLowerCase().includes(parentSearch.toLowerCase()))
+                    .map(t => (
+                      <TouchableOpacity
+                        key={t.id}
+                        style={styles.selectOption}
+                        onPress={() => {
+                          setSelectedParentId(t.id);
+                          setShowParentMenu(false);
+                        }}
+                      >
+                        <Text style={styles.selectOptionText} numberOfLines={1}>{t.title || 'Untitled'}</Text>
+                        <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }} numberOfLines={1}>{t.project || 'No Project'} • {t.assignee || 'Unassigned'}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  {state.tasks.length === 0 && (
+                    <Text style={{ paddingHorizontal: 14, paddingVertical: 12, color: '#6b7280' }}>No tasks available</Text>
+                  )}
+                </ScrollView>
+              </View>
             )}
-          </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -263,7 +320,17 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
           <View style={styles.dropdownContainer}>
             <TouchableOpacity
               style={styles.select}
-              onPress={() => setShowPriorityMenu(!showPriorityMenu)}
+              onPress={() => {
+                setShowPriorityMenu(prev => !prev);
+                // Close others to avoid overlap
+                setShowStatusMenu(false);
+                setShowHourMenu(false);
+                setShowMinuteMenu(false);
+                setShowProjectMenu(false);
+                setShowDuePicker(false);
+                setShowStartPicker(false);
+                setShowParentPicker(false);
+              }}
               activeOpacity={0.8}
             >
               <Text style={styles.selectText}>{formData.priority}</Text>
@@ -274,7 +341,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
               />
             </TouchableOpacity>
             {showPriorityMenu && (
-              <View style={[styles.selectMenu, { zIndex: 1000, elevation: 20 }]}>
+              <View style={[styles.selectMenu, { zIndex: 10000, elevation: 30, maxHeight: 260 }]}> 
                 {(['Low', 'Medium', 'High'] as const).map(p => (
                   <TouchableOpacity
                     key={p}
@@ -298,8 +365,15 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
               <TouchableOpacity
                 style={styles.select}
                 onPress={() => {
-                  setShowHourMenu(!showHourMenu);
+                  setShowHourMenu(prev => !prev);
+                  // Close others
                   setShowMinuteMenu(false);
+                  setShowPriorityMenu(false);
+                  setShowStatusMenu(false);
+                  setShowProjectMenu(false);
+                  setShowDuePicker(false);
+                  setShowStartPicker(false);
+                  setShowParentPicker(false);
                 }}
                 activeOpacity={0.8}
               >
@@ -307,7 +381,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
                 <Ionicons name={showHourMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
               </TouchableOpacity>
               {showHourMenu && (
-                <View style={[styles.selectMenu, { zIndex: 1000, elevation: 20, maxHeight: 220 }]}>
+                <View style={[styles.selectMenu, { zIndex: 10000, elevation: 30, maxHeight: 220 }]}> 
                   {Array.from({ length: 101 }).map((_, i) => (
                     <TouchableOpacity
                       key={`h-${i}`}
@@ -330,8 +404,15 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
               <TouchableOpacity
                 style={styles.select}
                 onPress={() => {
-                  setShowMinuteMenu(!showMinuteMenu);
+                  setShowMinuteMenu(prev => !prev);
+                  // Close others
                   setShowHourMenu(false);
+                  setShowPriorityMenu(false);
+                  setShowStatusMenu(false);
+                  setShowProjectMenu(false);
+                  setShowDuePicker(false);
+                  setShowStartPicker(false);
+                  setShowParentPicker(false);
                 }}
                 activeOpacity={0.8}
               >
@@ -339,7 +420,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
                 <Ionicons name={showMinuteMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
               </TouchableOpacity>
               {showMinuteMenu && (
-                <View style={[styles.selectMenu, { zIndex: 1000, elevation: 20 }] }>
+                <View style={[styles.selectMenu, { zIndex: 10000, elevation: 30, maxHeight: 220 }] }>
                   {[0, 15, 30, 45].map(m => (
                     <TouchableOpacity
                       key={`m-${m}`}
@@ -373,7 +454,15 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
                 Alert.alert('Date picker unavailable', 'This screen requires @react-native-community/datetimepicker and a native device/emulator. On web the calendar will not open.');
                 return;
               }
+              // Close others, open start picker
               setShowStartPicker(true);
+              setShowDuePicker(false);
+              setShowPriorityMenu(false);
+              setShowStatusMenu(false);
+              setShowHourMenu(false);
+              setShowMinuteMenu(false);
+              setShowProjectMenu(false);
+              setShowParentPicker(false);
             }}
           >
             <View style={[styles.input, styles.dateButton]}>
@@ -406,7 +495,15 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
                 Alert.alert('Date picker unavailable', 'This screen requires @react-native-community/datetimepicker and a native device/emulator. On web the calendar will not open.');
                 return;
               }
+              // Close others, open due picker
               setShowDuePicker(true);
+              setShowStartPicker(false);
+              setShowPriorityMenu(false);
+              setShowStatusMenu(false);
+              setShowHourMenu(false);
+              setShowMinuteMenu(false);
+              setShowProjectMenu(false);
+              setShowParentPicker(false);
             }}
           >
             <View style={[styles.input, styles.dateButton]}> 
@@ -438,14 +535,24 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
         <View style={styles.dropdownContainer}>
           <TouchableOpacity
             style={styles.select}
-            onPress={() => setShowProjectMenu(!showProjectMenu)}
+            onPress={() => {
+              setShowProjectMenu(prev => !prev);
+              // Close others
+              setShowPriorityMenu(false);
+              setShowStatusMenu(false);
+              setShowHourMenu(false);
+              setShowMinuteMenu(false);
+              setShowDuePicker(false);
+              setShowStartPicker(false);
+              setShowParentPicker(false);
+            }}
             activeOpacity={0.8}
           >
             <Text style={styles.selectText} numberOfLines={1}>{formData.project || 'Select project'}</Text>
             <Ionicons name={showProjectMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
           </TouchableOpacity>
           {showProjectMenu && (
-            <View style={[styles.selectMenu, { zIndex: 1000, elevation: 20, maxHeight: 260, position: 'absolute' }]}> 
+            <View style={[styles.selectMenu, { zIndex: 10000, elevation: 30, maxHeight: 280, position: 'absolute' }]}> 
               <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: 'white' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
                   <Ionicons name="search" size={14} color="#9ca3af" />
@@ -565,53 +672,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
         </TouchableOpacity>
       </View>
 
-      {/* Parent Picker Modal */}
-      {showParentPicker && (
-        <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}>
-          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowParentPicker(false)} />
-          <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 12, borderTopRightRadius: 12, maxHeight: 420 }}>
-            <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
-              <Text style={{ fontSize: 16, fontWeight: '700', color: '#111827' }}>Select Parent Task</Text>
-              <TouchableOpacity onPress={() => setShowParentPicker(false)}>
-                <Ionicons name="close" size={20} color="#6b7280" />
-              </TouchableOpacity>
-            </View>
-            <View style={{ paddingHorizontal: 12, paddingTop: 8 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
-                <Ionicons name="search" size={16} color="#9ca3af" />
-                <TextInput
-                  value={parentSearch}
-                  onChangeText={setParentSearch}
-                  placeholder="Search tasks..."
-                  placeholderTextColor="#9ca3af"
-                  style={{ marginLeft: 6, flex: 1, color: '#111827' }}
-                />
-              </View>
-            </View>
-            <ScrollView style={{ paddingHorizontal: 12, marginTop: 8 }}>
-              {state.tasks
-                .filter(t => !t.parentId)
-                .filter(t => !parentSearch.trim() || (t.title || '').toLowerCase().includes(parentSearch.toLowerCase()))
-                .map(t => (
-                  <TouchableOpacity
-                    key={t.id}
-                    style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' }}
-                    onPress={() => {
-                      setSelectedParentId(t.id);
-                      setShowParentPicker(false);
-                    }}
-                  >
-                    <Text style={{ fontSize: 14, color: '#111827' }} numberOfLines={1}>{t.title || 'Untitled'}</Text>
-                    <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{t.project || 'No Project'} • {t.assignee || 'Unassigned'}</Text>
-                  </TouchableOpacity>
-                ))}
-              {state.tasks.length === 0 && (
-                <Text style={{ paddingVertical: 16, textAlign: 'center', color: '#6b7280' }}>No tasks available</Text>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      )}
+      {/* Parent menu now inline like project dropdown */}
     </View>
   );
 };
