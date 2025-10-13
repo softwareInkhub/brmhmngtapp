@@ -25,6 +25,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAppContext } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { Task } from '../types';
 import { apiService } from '../services/api';
 import ProfileHeader from '../components/ProfileHeader';
@@ -33,6 +34,7 @@ const CreateTaskScreen = () => {
   const navigation = useNavigation();
   const route = useRoute() as any;
   const { state, dispatch } = useAppContext();
+  const { canManage } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [showPriorityMenu, setShowPriorityMenu] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState(false);
@@ -69,6 +71,16 @@ const CreateTaskScreen = () => {
   };
 
   const handleCreateTask = async () => {
+    // Check if user has permission to create tasks (admin or manager only)
+    if (!canManage()) {
+      Alert.alert(
+        'Permission Denied',
+        'Only administrators and managers can create tasks. Please contact your administrator for access.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     if (!formData.title.trim()) {
       Alert.alert('Error', 'Please enter a task title');
       return;
@@ -115,110 +127,98 @@ const CreateTaskScreen = () => {
       const response = await apiService.createTask(taskData);
 
       if (response.success && response.data) {
-        console.log('Task created successfully in database:', response.data);
-        console.log('Task data being added to local state:', response.data);
-        console.log('Task title in response.data:', response.data.title);
-        console.log('Task project in response.data:', response.data.project);
-        console.log('Task assignee in response.data:', response.data.assignee);
+        // The API service now guarantees a complete task object with all fields
+        const finalTask = response.data;
         
-        // Verify the task was actually saved to the database
-        const verificationResponse = await apiService.verifyTaskExists(response.data.id);
-        const isVerified = verificationResponse.success && verificationResponse.data;
+        console.log('📦 [CreateTaskScreen] Full task data received:', JSON.stringify(finalTask, null, 2));
+        console.log(`✅ Task created successfully: ${finalTask?.title || 'NO TITLE'} (ID: ${finalTask?.id || 'NO ID'})`);
+        console.log('📋 Task details:', {
+          title: finalTask?.title,
+          project: finalTask?.project,
+          assignee: finalTask?.assignee,
+          description: finalTask?.description,
+          priority: finalTask?.priority,
+          status: finalTask?.status,
+          dueDate: finalTask?.dueDate,
+        });
         
-        // Add to local state as well for immediate UI update
-        console.log('Dispatching ADD_TASK with payload:', response.data);
-        dispatch({ type: 'ADD_TASK', payload: response.data });
+        // Validate task data
+        if (!finalTask || !finalTask.id) {
+          console.error('❌ [CreateTaskScreen] Invalid task data received:', finalTask);
+          Alert.alert('Error', 'Task created but data is invalid. Please refresh the task list.');
+          return;
+        }
+        
+        console.log('📋 Final task ready for notification and UI:', finalTask);
+        
+        // Add to local state immediately for optimistic UI update
+        dispatch({ type: 'ADD_TASK', payload: finalTask });
 
-        // If this is a subtask, update the parent's subtasks array
+        // Handle subtask relationship if this is a subtask
         if (selectedParentId) {
           try {
-            console.log('Updating parent task subtasks list...');
             const parentRes = await apiService.getTaskById(selectedParentId);
             if (parentRes.success && parentRes.data) {
               const parent = parentRes.data;
               let subtasksArray: string[] = [];
               
-              // Parse existing subtasks
+              // Parse existing subtasks safely
               try {
-                if (parent.subtasks && typeof parent.subtasks === 'string') {
-                  subtasksArray = JSON.parse(parent.subtasks);
-                } else if (Array.isArray(parent.subtasks)) {
-                  subtasksArray = parent.subtasks;
-                }
+                subtasksArray = typeof parent.subtasks === 'string' 
+                  ? JSON.parse(parent.subtasks) 
+                  : Array.isArray(parent.subtasks) ? parent.subtasks : [];
               } catch (e) {
-                console.warn('Failed to parse parent subtasks, starting fresh:', e);
                 subtasksArray = [];
               }
               
-              // Add new subtask ID if not already present
-              if (!subtasksArray.includes(response.data.id)) {
-                subtasksArray.push(response.data.id);
-                console.log('Updated subtasks array:', subtasksArray);
-                
-                // Update parent task
+              // Add new subtask ID if not present
+              if (!subtasksArray.includes(finalTask.id)) {
+                subtasksArray.push(finalTask.id);
                 await apiService.updateTask(selectedParentId, { 
                   subtasks: JSON.stringify(subtasksArray) 
                 } as any);
-                console.log('Parent task subtasks updated successfully');
+                console.log(`✅ Parent task updated with new subtask`);
               }
             }
           } catch (e) {
-            console.warn('Failed to update parent task subtasks:', e);
-            // Don't fail the task creation if parent update fails
+            console.warn('⚠️ Failed to update parent task:', e);
           }
         }
 
-        // Wait and get confirmed task data from database before sending notification
-        console.log('Waiting to get confirmed task data from database...');
-        let confirmedTaskData = response.data;
-        
-        if (isVerified && response.data.id) {
-          // Small delay to ensure database has processed the data
-          console.log('Waiting 2 seconds for database to process...');
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          
-          // Get the task data directly from database to ensure we have the real data
-          console.log('Fetching confirmed task data from database...');
-          const confirmedTaskResponse = await apiService.getTaskById(response.data.id);
-          
-          if (confirmedTaskResponse.success && confirmedTaskResponse.data) {
-            confirmedTaskData = confirmedTaskResponse.data;
-            console.log('Got confirmed task data from database:', confirmedTaskData);
-            console.log('Confirmed task title:', confirmedTaskData.title);
-            console.log('Confirmed task project:', confirmedTaskData.project);
-            console.log('Confirmed task assignee:', confirmedTaskData.assignee);
+        // Send WhatsApp notification with FINAL task (guaranteed to have all fields)
+        console.log('📱 Sending WhatsApp notification for task:', finalTask.id);
+        console.log('📱 Notification task data:', {
+          title: finalTask.title,
+          project: finalTask.project,
+          assignee: finalTask.assignee,
+          description: finalTask.description
+        });
+        try {
+          const notificationResponse = await apiService.sendWhatsAppNotification(finalTask as any);
+          if (notificationResponse.success) {
+            console.log('✅ WhatsApp notification sent successfully');
           } else {
-            console.warn('Failed to get confirmed task data, using creation response data');
+            console.warn('⚠️ Failed to send WhatsApp notification:', notificationResponse.error);
           }
+        } catch (notificationError) {
+          console.error('❌ Error sending WhatsApp notification:', notificationError);
+          // Don't block the user if notification fails - just log it
         }
 
-        // Send WhatsApp notification with confirmed data
-        console.log('Sending WhatsApp notification with confirmed data...');
-        const notificationResponse = await apiService.sendTaskNotification(confirmedTaskData);
+        // Show success alert
+        const taskTitle = finalTask.title || 'Untitled Task';
+        const taskProject = finalTask.project || 'No Project';
+        const taskAssignee = finalTask.assignee || 'Unassigned';
+        const taskPriority = finalTask.priority || 'Medium';
+        const taskDueDate = finalTask.dueDate || 'Not set';
         
-        let notificationStatus = '';
-        if (notificationResponse.success) {
-          notificationStatus = '📱 WhatsApp notification sent with confirmed data!';
-          console.log('WhatsApp notification sent successfully with confirmed data');
-        } else {
-          notificationStatus = '⚠️ Task created but WhatsApp notification failed to send.';
-          console.error('WhatsApp notification failed:', notificationResponse.error);
-        }
-
-        const verificationMessage = isVerified 
-          ? '✅ Verified: Task is saved in DynamoDB database!'
-          : '⚠️ Warning: Task created but verification failed. Please refresh the task list.';
-
         Alert.alert(
-          'Success! ✅', 
-          `Task "${confirmedTaskData.title || response.data.title}" has been created.\n\n${verificationMessage}\n\n${notificationStatus}\n\nTask ID: ${response.data.id}\nProject: ${confirmedTaskData.project || response.data.project}\nAssignee: ${confirmedTaskData.assignee || response.data.assignee}`,
+          'Task Created Successfully! ✅', 
+          `Task "${taskTitle}" has been created and saved.\n\n📋 Task Details:\n• Project: ${taskProject}\n• Assignee: ${taskAssignee}\n• Priority: ${taskPriority}\n• Due Date: ${taskDueDate}\n\n📱 WhatsApp notification has been sent.`,
           [
             { 
               text: 'OK', 
-              onPress: () => {
-                console.log('Navigating back to tasks screen...');
-                navigation.goBack();
-              }
+              onPress: () => navigation.goBack()
             }
           ]
         );

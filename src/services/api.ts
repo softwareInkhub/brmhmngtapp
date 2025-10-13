@@ -2,8 +2,8 @@ import { Task, User, AuthResponse } from '../types';
 
 const API_BASE_URL = 'https://brmh.in/crud';
 const AUTH_BASE_URL = 'https://brmh.in/auth';
-const TASK_NOTIFICATION_ENDPOINT = 'https://brmh.in/notify/11d0d0c0-9745-48bd-bbbe-9aa0c517f294';
 const AUTH_TABLE_NAME = 'brmh-users';
+const NOTIFICATION_URL = 'https://brmh.in/notify/11d0d0c0-9745-48bd-bbbe-9aa0c517f294';
 
 // Helper function to format dates
 const formatDate = (dateString: string): string => {
@@ -65,6 +65,17 @@ const base64Decode = (str: string): string => {
 const convertDynamoDBItem = (item: any): any => {
   if (!item || typeof item !== 'object') {
     return item;
+  }
+  
+  // Check if this is a DynamoDB type wrapper (S, N, BOOL, etc.) at root level
+  if (Object.keys(item).length === 1) {
+    const key = Object.keys(item)[0];
+    if (key === 'S') return item.S;
+    if (key === 'N') return parseFloat(item.N);
+    if (key === 'BOOL') return item.BOOL;
+    if (key === 'NULL') return null;
+    if (key === 'L') return item.L.map((i: any) => convertDynamoDBItem(i));
+    if (key === 'M') return convertDynamoDBItem(item.M);
   }
   
   const converted: any = {};
@@ -187,26 +198,38 @@ class ApiService {
       return response;
     }
 
+    console.log('📦 [CREATE TASK] Full API response:', JSON.stringify(response, null, 2));
+
     // Handle different possible response formats for creation
     let rawCreatedTask: any;
     
     if (response.data && response.data.item) {
       // Response with item object
+      console.log('📦 [CREATE TASK] Using response.data.item format');
       rawCreatedTask = response.data.item;
     } else if (response.data && response.data.data) {
       // Response with data object
+      console.log('📦 [CREATE TASK] Using response.data.data format');
       rawCreatedTask = response.data.data;
     } else if (response.data && response.data.result) {
       // Response with result object
+      console.log('📦 [CREATE TASK] Using response.data.result format');
       rawCreatedTask = response.data.result;
+    } else if (response.data && response.data.Item) {
+      // DynamoDB Item format (capital I)
+      console.log('📦 [CREATE TASK] Using response.data.Item format (DynamoDB)');
+      rawCreatedTask = response.data.Item;
     } else if (response.data && !Array.isArray(response.data)) {
       // Direct object response
+      console.log('📦 [CREATE TASK] Using direct response.data format');
       rawCreatedTask = response.data;
     } else {
-      // If response format is unexpected, return the original task
-      console.log('Unexpected creation response format, using original task');
-      rawCreatedTask = task;
+      // If response format is unexpected, use original task with generated ID
+      console.log('📦 [CREATE TASK] Unexpected creation response format, using original task with ID');
+      rawCreatedTask = { ...task, id: `task-${Date.now()}` };
     }
+
+    console.log('📦 [CREATE TASK] Raw created task (before conversion):', JSON.stringify(rawCreatedTask, null, 2));
 
     // Convert DynamoDB format to plain object if needed
     console.log('=== TASK CREATION CONVERSION ===');
@@ -228,9 +251,22 @@ class ApiService {
     console.log('Created task project:', createdTask.project);
     console.log('Created task description:', createdTask.description);
 
+    // CRITICAL FIX: If API didn't return the data we sent, merge original task data
+    // This handles cases where the API only returns {success: true} or minimal data
+    const finalTask = {
+      ...task,  // Original data we sent
+      ...createdTask,  // Override with API response (which should have id, timestamps, etc.)
+      // Ensure id exists
+      id: createdTask.id || `task-${Date.now()}`,
+    };
+
+    console.log('📦 [CREATE TASK] Final task after merge:', JSON.stringify(finalTask, null, 2));
+    console.log('📦 [CREATE TASK] Final task title:', finalTask.title);
+    console.log('📦 [CREATE TASK] Final task project:', finalTask.project);
+
     return {
       success: true,
-      data: createdTask,
+      data: finalTask,
     };
   }
 
@@ -582,69 +618,6 @@ class ApiService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
-    }
-  }
-
-  async sendTaskNotification(taskData: Task): Promise<ApiResponse<any>> {
-    try {
-      console.log('=== SENDING WHATSAPP NOTIFICATION ===');
-      console.log('Full task data received:', taskData);
-      console.log('Task title:', taskData.title);
-      console.log('Task project:', taskData.project);
-      console.log('Task assignee:', taskData.assignee);
-      console.log('Task description:', taskData.description);
-      console.log('Task status:', taskData.status);
-      console.log('Task priority:', taskData.priority);
-      console.log('Task startDate:', taskData.startDate);
-      console.log('Task dueDate:', taskData.dueDate);
-      console.log('Task estimatedHours:', taskData.estimatedHours);
-      console.log('Task tags:', taskData.tags);
-      console.log('Task comments:', taskData.comments);
-      console.log('=====================================');
-      
-      const message = `📢 *New Task Created*\n\n` +
-        `🔹 *Task Title:* ${taskData.title || 'No Title'}\n` +
-        `🔹 *Project:* ${taskData.project || 'No Project'}\n` +
-        `🔹 *Description:* ${taskData.description || 'No description provided'}\n` +
-        `🔹 *Assignee:* ${taskData.assignee || 'No Assignee'}\n` +
-        `🔹 *Status:* ${taskData.status || 'To Do'}\n` +
-        `🔹 *Priority:* ${taskData.priority || 'Medium'}\n\n` +
-        `📊 *Task Details*\n` +
-        `- Start Date: ${formatDate(taskData.startDate)}\n` +
-        `- Due Date: ${formatDate(taskData.dueDate)}\n` +
-        `- Estimated Hours: ${taskData.estimatedHours || 0} hours\n` +
-        `- Progress: ${taskData.progress || 0}%\n\n` +
-        `🏷️ *Tags:* ${taskData.tags || 'No tags'}\n\n` +
-        `📝 *Additional Notes:* ${taskData.comments || 'No additional notes'}\n\n` +
-        `✅ Please review and start working on this task.`;
-
-      console.log('Final notification message:', message);
-
-      const response = await fetch(TASK_NOTIFICATION_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ message }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log('WhatsApp notification sent successfully:', result);
-      
-      return {
-        success: true,
-        data: result,
-      };
-    } catch (error) {
-      console.error('Failed to send task notification:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to send notification',
       };
     }
   }
@@ -1060,6 +1033,91 @@ class ApiService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Logout request failed',
+      };
+    }
+  }
+
+  // WhatsApp Notification Service
+  async sendWhatsAppNotification(task: Task): Promise<ApiResponse<any>> {
+    try {
+      console.log('📱 [NOTIFICATION] ========== NOTIFICATION DEBUG ==========');
+      console.log('📱 [NOTIFICATION] Full task object:', JSON.stringify(task, null, 2));
+      console.log('📱 [NOTIFICATION] Task ID:', task.id);
+      console.log('📱 [NOTIFICATION] Task title:', task.title);
+      console.log('📱 [NOTIFICATION] Task project:', task.project);
+      console.log('📱 [NOTIFICATION] Task assignee:', task.assignee);
+      console.log('📱 [NOTIFICATION] Task description:', task.description);
+      console.log('📱 [NOTIFICATION] Task type:', typeof task);
+      console.log('📱 [NOTIFICATION] Task keys:', Object.keys(task));
+      console.log('📱 [NOTIFICATION] =======================================');
+      
+      // Format dates nicely
+      const formattedStartDate = task.startDate ? formatDate(task.startDate) : 'Not set';
+      const formattedDueDate = task.dueDate ? formatDate(task.dueDate) : 'Not set';
+      
+      // Build the notification message
+      const message = `📢 *New Task Created*
+
+🔹 *Task Title:* ${task.title}
+🔹 *Project:* ${task.project || 'No Project'}
+🔹 *Description:* ${task.description || 'No description provided'}
+🔹 *Assignee:* ${task.assignee || 'Unassigned'}
+🔹 *Status:* ${task.status}
+🔹 *Priority:* ${task.priority}
+
+📊 *Task Details*
+- Start Date: ${formattedStartDate}
+- Due Date: ${formattedDueDate}
+- Estimated Hours: ${task.estimatedHours || 0} hours
+- Progress: ${task.progress || 0}%
+
+🏷️ *Tags:* ${task.tags || 'None'}
+
+✅ Please review and start working on this task.`;
+
+      console.log('📱 [NOTIFICATION] Notification message:', message);
+
+      const response = await fetch(NOTIFICATION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ message }),
+      });
+
+      console.log('📱 [NOTIFICATION] Response status:', response.status);
+
+      if (!response.ok) {
+        let errorText = '';
+        try { errorText = await response.text(); } catch {}
+        console.error('📱 [NOTIFICATION] Failed to send notification:', errorText);
+        return {
+          success: false,
+          error: `Failed to send notification: ${response.status}${errorText ? ` - ${errorText}` : ''}`,
+        };
+      }
+
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        // Some APIs might not return JSON
+        data = { success: true };
+      }
+
+      console.log('📱 [NOTIFICATION] Notification sent successfully:', data);
+
+      return {
+        success: true,
+        data: data,
+        message: 'WhatsApp notification sent successfully',
+      };
+    } catch (error) {
+      console.error('📱 [NOTIFICATION] Error sending notification:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to send notification',
       };
     }
   }

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { apiService } from '../services/api';
 
 // Optional dependency to avoid type errors if not installed
@@ -31,6 +32,7 @@ interface CreateTaskFormProps {
 
 const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }) => {
   const { state, dispatch } = useAppContext();
+  const { canManage } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [showPriorityMenu, setShowPriorityMenu] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState(false);
@@ -83,6 +85,16 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
   };
 
   const handleCreateTask = async () => {
+    // Check if user has permission to create tasks (admin or manager only)
+    if (!canManage()) {
+      Alert.alert(
+        'Permission Denied',
+        'Only administrators and managers can create tasks. Please contact your administrator for access.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     if (!formData.title.trim()) {
       Alert.alert('Error', 'Please enter a task title');
       return;
@@ -154,9 +166,23 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
           }
         }
 
+        // Send WhatsApp notification
+        console.log('📱 Sending WhatsApp notification for task:', response.data.id);
+        try {
+          const notificationResponse = await apiService.sendWhatsAppNotification(response.data);
+          if (notificationResponse.success) {
+            console.log('✅ WhatsApp notification sent successfully');
+          } else {
+            console.warn('⚠️ Failed to send WhatsApp notification:', notificationResponse.error);
+          }
+        } catch (notificationError) {
+          console.error('❌ Error sending WhatsApp notification:', notificationError);
+          // Don't block the user if notification fails - just log it
+        }
+
         Alert.alert(
           'Success! ✅', 
-          `Task "${response.data.title}" has been created.`,
+          `Task "${response.data.title}" has been created.\n\n📱 WhatsApp notification has been sent.`,
           [
             { 
               text: 'OK', 
