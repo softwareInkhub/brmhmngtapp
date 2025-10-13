@@ -21,6 +21,7 @@ import CreateProjectScreen from '../screens/CreateProjectScreen';
 import ProjectDetailsScreen from '../screens/ProjectDetailsScreen';
 import CreateTaskScreen from '../screens/CreateTaskScreen';
 import CreateTeamScreen from '../screens/CreateTeamScreen';
+import CreateMeetingScreen from '../screens/CreateMeetingScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<BottomTabParamList>();
@@ -207,6 +208,13 @@ const AppNavigator = () => {
             component={ProjectDetailsScreen}
             options={{ 
               title: 'Project Details',
+            }}
+          />
+          <Stack.Screen 
+            name="CreateMeeting" 
+            component={CreateMeetingScreen}
+            options={{ 
+              headerShown: false,
             }}
           />
           </>

@@ -1,10 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,32 +16,70 @@ import ProfileHeader from '../components/ProfileHeader';
 import { getClientIds, GOOGLE_SCOPES, getStoredTokens, storeTokens, clearTokens } from '../services/googleAuth';
 import * as AuthSession from 'expo-auth-session';
 import { makeRedirectUri, useAuthRequest } from 'expo-auth-session';
-
-interface Event {
-  id: string;
-  title: string;
-  time: string;
-  type: 'meeting' | 'review' | 'presentation';
-}
+import { 
+  fetchEventsForDate, 
+  fetchEventsForMonth, 
+  CalendarEvent,
+  getEventsByDate 
+} from '../services/googleCalendar';
 
 const CalendarScreen = () => {
   const navigation = useNavigation();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [hasGoogle, setHasGoogle] = useState(false);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [selectedDateEvents, setSelectedDateEvents] = useState<CalendarEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [eventsByDate, setEventsByDate] = useState<Map<string, CalendarEvent[]>>(new Map());
 
   // OAuth request
   const clientIds = getClientIds();
-  const redirectUri = makeRedirectUri({ useProxy: true });
+  // Use Expo's auth proxy in development so the redirect matches a web client
+  const redirectUri = (makeRedirectUri as any)({ useProxy: true });
+  console.log('[Google OAuth] Using redirectUri:', redirectUri);
   const [request, response, promptAsync] = useAuthRequest(
     {
       clientId: clientIds.expo || clientIds.android || clientIds.ios,
       scopes: GOOGLE_SCOPES,
       redirectUri,
       responseType: AuthSession.ResponseType.Token,
+      usePKCE: false,
     },
     { authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth', tokenEndpoint: 'https://oauth2.googleapis.com/token' }
   );
+
+  // Load events from Google Calendar
+  const loadEvents = useCallback(async () => {
+    if (!hasGoogle) return;
+    
+    try {
+      setLoading(true);
+      const monthEvents = await fetchEventsForMonth(currentDate);
+      setEvents(monthEvents);
+      
+      // Group events by date
+      const grouped = getEventsByDate(monthEvents);
+      setEventsByDate(grouped);
+      
+      // Filter events for selected date
+      const dateKey = selectedDate.toISOString().split('T')[0];
+      setSelectedDateEvents(grouped.get(dateKey) || []);
+    } catch (error: any) {
+      console.error('Error loading events:', error);
+      Alert.alert('Error', 'Failed to load calendar events. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [hasGoogle, currentDate, selectedDate]);
+
+  // Refresh events
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadEvents();
+    setRefreshing(false);
+  }, [loadEvents]);
 
   useEffect(() => {
     (async () => {
@@ -50,35 +91,33 @@ const CalendarScreen = () => {
   useEffect(() => {
     (async () => {
       if (response?.type === 'success' && response.params?.access_token) {
-        await storeTokens({ accessToken: response.params.access_token });
+        const expiresIn = Number(response.params.expires_in) || 3600;
+        await storeTokens({ 
+          accessToken: response.params.access_token,
+          expiresAt: Date.now() + (expiresIn * 1000)
+        });
         setHasGoogle(true);
       }
     })();
   }, [response]);
 
+  // Load events when Google is connected or date changes
+  useEffect(() => {
+    if (hasGoogle) {
+      loadEvents();
+    }
+  }, [hasGoogle, currentDate]);
+
+  // Update selected date events when selection changes
+  useEffect(() => {
+    if (hasGoogle) {
+      const dateKey = selectedDate.toISOString().split('T')[0];
+      setSelectedDateEvents(eventsByDate.get(dateKey) || []);
+    }
+  }, [selectedDate, eventsByDate, hasGoogle]);
+
   const currentMonth = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
   const currentYear = currentDate.getFullYear();
-
-  const events: Event[] = [
-    {
-      id: '1',
-      title: 'Team Meeting',
-      time: '10:00 AM - 11:00 AM',
-      type: 'meeting',
-    },
-    {
-      id: '2',
-      title: 'Sprint Review',
-      time: '1:00 PM - 2:00 PM',
-      type: 'review',
-    },
-    {
-      id: '3',
-      title: 'Client Presentation',
-      time: '3:00 PM - 4:00 PM',
-      type: 'presentation',
-    },
-  ];
 
   const daysOfWeek = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
@@ -122,6 +161,12 @@ const CalendarScreen = () => {
     setSelectedDate(newSelectedDate);
   };
 
+  const hasEventsOnDay = (day: number): boolean => {
+    const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+    const dateKey = date.toISOString().split('T')[0];
+    return eventsByDate.has(dateKey) && (eventsByDate.get(dateKey)?.length || 0) > 0;
+  };
+
   const renderCalendarGrid = () => {
     const days = [];
     const daysInMonth = getDaysInMonth(currentDate);
@@ -136,6 +181,7 @@ const CalendarScreen = () => {
     for (let day = 1; day <= daysInMonth; day++) {
       const isSelectedDay = isSelected(day);
       const isTodayDate = isToday(day);
+      const hasEvents = hasEventsOnDay(day);
       
       days.push(
         <TouchableOpacity
@@ -154,6 +200,9 @@ const CalendarScreen = () => {
           ]}>
             {day}
           </Text>
+          {hasEvents && !isSelectedDay && (
+            <View style={styles.eventDot} />
+          )}
         </TouchableOpacity>
       );
     }
@@ -161,14 +210,33 @@ const CalendarScreen = () => {
     return days;
   };
 
-  const renderEventItem = (event: Event) => (
+  const getEventIcon = (type: CalendarEvent['type']) => {
+    switch (type) {
+      case 'meeting':
+        return 'people-outline';
+      case 'review':
+        return 'checkbox-outline';
+      case 'presentation':
+        return 'easel-outline';
+      default:
+        return 'calendar-outline';
+    }
+  };
+
+  const renderEventItem = (event: CalendarEvent) => (
     <View key={event.id} style={styles.eventItem}>
       <View style={styles.eventIcon}>
-        <Ionicons name="people-outline" size={24} color="#137fec" />
+        <Ionicons name={getEventIcon(event.type)} size={24} color="#137fec" />
       </View>
       <View style={styles.eventContent}>
         <Text style={styles.eventTitle}>{event.title}</Text>
         <Text style={styles.eventTime}>{event.time}</Text>
+        {event.location && (
+          <View style={styles.locationContainer}>
+            <Ionicons name="location-outline" size={14} color="#6b7280" />
+            <Text style={styles.eventLocation}>{event.location}</Text>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -193,7 +261,13 @@ const CalendarScreen = () => {
         onRightElementPress={() => navigation.goBack()}
       />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         {/* Google Connect */}
         {!hasGoogle && (
           <TouchableOpacity
@@ -203,6 +277,22 @@ const CalendarScreen = () => {
           >
             <Ionicons name="logo-google" size={18} color="#fff" />
             <Text style={styles.connectText}>Connect Google Calendar</Text>
+          </TouchableOpacity>
+        )}
+        
+        {hasGoogle && (
+          <TouchableOpacity
+            style={styles.disconnectButton}
+            onPress={async () => {
+              await clearTokens();
+              setHasGoogle(false);
+              setEvents([]);
+              setSelectedDateEvents([]);
+            }}
+          >
+            <Ionicons name="checkmark-circle" size={18} color="#10b981" />
+            <Text style={styles.connectedText}>Google Calendar Connected</Text>
+            <Text style={styles.disconnectText}>Tap to disconnect</Text>
           </TouchableOpacity>
         )}
         {/* Calendar Header */}
@@ -226,8 +316,8 @@ const CalendarScreen = () => {
         <View style={styles.calendarContainer}>
           {/* Days of week header */}
           <View style={styles.weekHeader}>
-            {daysOfWeek.map((day) => (
-              <Text key={day} style={styles.weekDayText}>
+            {daysOfWeek.map((day, index) => (
+              <Text key={`day-${index}`} style={styles.weekDayText}>
                 {day}
               </Text>
             ))}
@@ -248,9 +338,26 @@ const CalendarScreen = () => {
               year: 'numeric' 
             })}
           </Text>
-          <View style={styles.eventsList}>
-            {events.map(renderEventItem)}
-          </View>
+          
+          {loading && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#137fec" />
+              <Text style={styles.loadingText}>Loading events...</Text>
+            </View>
+          )}
+          
+          {!loading && hasGoogle && selectedDateEvents.length === 0 && (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="calendar-outline" size={48} color="#d1d5db" />
+              <Text style={styles.emptyText}>No events for this day</Text>
+            </View>
+          )}
+          
+          {!loading && (!hasGoogle || selectedDateEvents.length > 0) && (
+            <View style={styles.eventsList}>
+              {selectedDateEvents.map(renderEventItem)}
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -432,6 +539,66 @@ const styles = StyleSheet.create({
   connectText: {
     color: 'white',
     fontWeight: '600',
+  },
+  disconnectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f0fdf4',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#86efac',
+  },
+  connectedText: {
+    color: '#10b981',
+    fontWeight: '600',
+  },
+  disconnectText: {
+    color: '#6b7280',
+    fontSize: 12,
+    marginLeft: 4,
+  },
+  eventDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#137fec',
+    position: 'absolute',
+    bottom: 4,
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  eventLocation: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#9ca3af',
   },
 });
 

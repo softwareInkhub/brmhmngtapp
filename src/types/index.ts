@@ -141,5 +141,6 @@ export type BottomTabParamList = {
   Tasks: undefined;
   Teams: undefined;
   Calendar: undefined;
+  Projects: undefined;
   Sprints: undefined;
 };
