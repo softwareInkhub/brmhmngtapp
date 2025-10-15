@@ -320,13 +320,20 @@ const CreateTaskScreen = () => {
         </View>
 
         {/* Priority + Estimated Hours (Row) */}
-        <View style={[styles.inputGroup, styles.row, { zIndex: 2000 }] }>
-          <View style={[styles.col, styles.dropdownWrapper]}>
+        <View style={[styles.inputGroup, styles.row]}>
+          <View style={[styles.col, styles.priorityDropdownWrapper]}>
             <Text style={styles.label}>Priority</Text>
-            <View style={styles.dropdownContainer}>
+            <View style={styles.priorityDropdownContainer}>
               <TouchableOpacity
                 style={styles.select}
-                onPress={() => setShowPriorityMenu(!showPriorityMenu)}
+                onPress={() => {
+                  setShowPriorityMenu(!showPriorityMenu);
+                  // Close other dropdowns when opening priority
+                  setShowHourMenu(false);
+                  setShowMinuteMenu(false);
+                  setShowProjectMenu(false);
+                  setShowStatusMenu(false);
+                }}
                 activeOpacity={0.8}
               >
                 <Text style={styles.selectText}>{formData.priority}</Text>
@@ -337,7 +344,7 @@ const CreateTaskScreen = () => {
                 />
               </TouchableOpacity>
               {showPriorityMenu && (
-                <View style={[styles.selectMenu, { zIndex: 1000, elevation: 20 }]}>
+                <View style={[styles.prioritySelectMenu]}>
                   {(['Low', 'Medium', 'High'] as const).map(p => (
                     <TouchableOpacity
                       key={p}
@@ -354,15 +361,19 @@ const CreateTaskScreen = () => {
               )}
             </View>
           </View>
-          <View style={[styles.col, styles.dropdownWrapper]}>
+          <View style={[styles.col, styles.hoursDropdownWrapper]}>
             <Text style={styles.label}>Estimated Hours</Text>
             <View style={styles.row}>
-              <View style={[styles.col, styles.dropdownWrapper]}>
+              <View style={[styles.col, styles.hourDropdownContainer]}>
                 <TouchableOpacity
                   style={styles.select}
                   onPress={() => {
                     setShowHourMenu(!showHourMenu);
                     setShowMinuteMenu(false);
+                    // Close other dropdowns when opening hours
+                    setShowPriorityMenu(false);
+                    setShowProjectMenu(false);
+                    setShowStatusMenu(false);
                   }}
                   activeOpacity={0.8}
                 >
@@ -370,31 +381,41 @@ const CreateTaskScreen = () => {
                   <Ionicons name={showHourMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
                 </TouchableOpacity>
                 {showHourMenu && (
-                  <View style={[styles.selectMenu, { zIndex: 1000, elevation: 20, maxHeight: 220 }]}>
-                    {Array.from({ length: 101 }).map((_, i) => (
-                      <TouchableOpacity
-                        key={`h-${i}`}
-                        style={styles.selectOption}
-                        onPress={() => {
-                          const v = String(i);
-                          setHourValue(v);
-                          const total = (i + (parseInt(minuteValue) || 0) / 60).toFixed(2);
-                          handleInputChange('estimatedHours', total);
-                          setShowHourMenu(false);
-                        }}
-                      >
-                        <Text style={styles.selectOptionText}>{i} h</Text>
-                      </TouchableOpacity>
-                    ))}
+                  <View style={[styles.hourSelectMenu]}>
+                    <ScrollView 
+                      style={{ maxHeight: 200 }}
+                      showsVerticalScrollIndicator={true}
+                      nestedScrollEnabled={true}
+                    >
+                      {Array.from({ length: 101 }).map((_, i) => (
+                        <TouchableOpacity
+                          key={`h-${i}`}
+                          style={styles.selectOption}
+                          onPress={() => {
+                            const v = String(i);
+                            setHourValue(v);
+                            const total = (i + (parseInt(minuteValue) || 0) / 60).toFixed(2);
+                            handleInputChange('estimatedHours', total);
+                            setShowHourMenu(false);
+                          }}
+                        >
+                          <Text style={styles.selectOptionText}>{i} h</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
                   </View>
                 )}
               </View>
-              <View style={[styles.col, styles.dropdownWrapper]}>
+              <View style={[styles.col, styles.minuteDropdownContainer]}>
                 <TouchableOpacity
                   style={styles.select}
                   onPress={() => {
                     setShowMinuteMenu(!showMinuteMenu);
                     setShowHourMenu(false);
+                    // Close other dropdowns when opening minutes
+                    setShowPriorityMenu(false);
+                    setShowProjectMenu(false);
+                    setShowStatusMenu(false);
                   }}
                   activeOpacity={0.8}
                 >
@@ -402,7 +423,7 @@ const CreateTaskScreen = () => {
                   <Ionicons name={showMinuteMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
                 </TouchableOpacity>
                 {showMinuteMenu && (
-                  <View style={[styles.selectMenu, { zIndex: 1000, elevation: 20 }] }>
+                  <View style={[styles.minuteSelectMenu]}>
                     {[0, 15, 30, 45].map(m => (
                       <TouchableOpacity
                         key={`m-${m}`}
@@ -496,19 +517,26 @@ const CreateTaskScreen = () => {
         </View>
 
         {/* Project */}
-        <View style={[styles.inputGroup, styles.dropdownWrapper]}>
+        <View style={[styles.inputGroup, styles.projectDropdownWrapper]}>
           <Text style={styles.label}>Project *</Text>
-          <View style={styles.dropdownContainer}>
+          <View style={styles.projectDropdownContainer}>
             <TouchableOpacity
               style={styles.select}
-              onPress={() => setShowProjectMenu(!showProjectMenu)}
+              onPress={() => {
+                setShowProjectMenu(!showProjectMenu);
+                // Close other dropdowns when opening project
+                setShowPriorityMenu(false);
+                setShowHourMenu(false);
+                setShowMinuteMenu(false);
+                setShowStatusMenu(false);
+              }}
               activeOpacity={0.8}
             >
               <Text style={styles.selectText} numberOfLines={1}>{formData.project || 'Select project'}</Text>
               <Ionicons name={showProjectMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
             </TouchableOpacity>
             {showProjectMenu && (
-              <View style={[styles.selectMenu, { zIndex: 4000, elevation: 24, maxHeight: 280, position: 'absolute' }]}> 
+              <View style={[styles.projectSelectMenu]}> 
                 <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: 'white' }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
                     <Ionicons name="search" size={14} color="#9ca3af" />
@@ -526,6 +554,7 @@ const CreateTaskScreen = () => {
                   nestedScrollEnabled
                   style={{ maxHeight: 220 }}
                   contentContainerStyle={{ paddingBottom: 8 }}
+                  showsVerticalScrollIndicator={true}
                 >
                   {(projects || [])
                     .filter(p => !projectSearch.trim() || (p.name || p.title || '').toLowerCase().includes(projectSearch.toLowerCase()))
@@ -548,7 +577,7 @@ const CreateTaskScreen = () => {
         </View>
 
         {/* Assigned To + Status (Row) */}
-        <View style={[styles.inputGroup, styles.row, { zIndex: 2000 }]}>
+        <View style={[styles.inputGroup, styles.row]}>
           <View style={[styles.col, { flex: 0.6 }]}>
             <Text style={styles.label}>Assigned To *</Text>
             <TextInput
@@ -558,12 +587,19 @@ const CreateTaskScreen = () => {
               onChangeText={(value) => handleInputChange('assignee', value)}
             />
           </View>
-          <View style={[styles.col, styles.dropdownWrapper, { flex: 0.4 }]}>
+          <View style={[styles.col, styles.statusDropdownWrapper, { flex: 0.4 }]}>
             <Text style={styles.label}>Status *</Text>
-            <View style={styles.dropdownContainer}>
+            <View style={styles.statusDropdownContainer}>
               <TouchableOpacity
                 style={styles.select}
-                onPress={() => setShowStatusMenu(!showStatusMenu)}
+                onPress={() => {
+                  setShowStatusMenu(!showStatusMenu);
+                  // Close other dropdowns when opening status
+                  setShowPriorityMenu(false);
+                  setShowHourMenu(false);
+                  setShowMinuteMenu(false);
+                  setShowProjectMenu(false);
+                }}
                 activeOpacity={0.8}
               >
                 <Text style={styles.selectText}>{formData.status}</Text>
@@ -574,7 +610,7 @@ const CreateTaskScreen = () => {
                 />
               </TouchableOpacity>
               {showStatusMenu && (
-                <View style={[styles.selectMenu, { zIndex: 1000, elevation: 20 }]}>
+                <View style={[styles.statusSelectMenu]}>
                   {(['To Do', 'In Progress', 'Completed', 'Overdue'] as const).map(s => (
                     <TouchableOpacity
                       key={s}
@@ -750,6 +786,128 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     zIndex: 4000,
   },
+  // Priority dropdown styles
+  priorityDropdownWrapper: {
+    zIndex: 5000,
+    elevation: 25,
+  },
+  priorityDropdownContainer: {
+    position: 'relative',
+    zIndex: 5000,
+  },
+  prioritySelectMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 25,
+    overflow: 'hidden',
+    zIndex: 5000,
+  },
+  // Hours dropdown styles
+  hoursDropdownWrapper: {
+    zIndex: 4000,
+    elevation: 20,
+  },
+  hourDropdownContainer: {
+    position: 'relative',
+    zIndex: 4000,
+  },
+  hourSelectMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 20,
+    overflow: 'hidden',
+    zIndex: 4000,
+  },
+  // Minutes dropdown styles
+  minuteDropdownContainer: {
+    position: 'relative',
+    zIndex: 4000,
+  },
+  minuteSelectMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 20,
+    overflow: 'hidden',
+    zIndex: 4000,
+  },
+  // Project dropdown styles
+  projectDropdownWrapper: {
+    zIndex: 3000,
+    elevation: 15,
+  },
+  projectDropdownContainer: {
+    position: 'relative',
+    zIndex: 3000,
+  },
+  projectSelectMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 15,
+    overflow: 'hidden',
+    zIndex: 3000,
+  },
+  // Status dropdown styles
+  statusDropdownWrapper: {
+    zIndex: 2000,
+    elevation: 10,
+  },
+  statusDropdownContainer: {
+    position: 'relative',
+    zIndex: 2000,
+  },
+  statusSelectMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 10,
+    overflow: 'hidden',
+    zIndex: 2000,
+  },
+  // Legacy styles for backward compatibility
   dropdownContainer: {
     position: 'relative',
     zIndex: 3500,

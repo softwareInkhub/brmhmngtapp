@@ -25,11 +25,13 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    
     "extra": {
       "googleExpoClientId": "612179888169-brgngnt28t0ghl7d7ph18tinden68bnt.apps.googleusercontent.com",
       "googleIosClientId": "612179888169-brgngnt28t0ghl7d7ph18tinden68bnt.apps.googleusercontent.com",
       "googleAndroidClientId": "612179888169-brgngnt28t0ghl7d7ph18tinden68bnt.apps.googleusercontent.com"
-    }
+    },
+    "plugins": [
+      "expo-web-browser"
+    ]
   }
 }

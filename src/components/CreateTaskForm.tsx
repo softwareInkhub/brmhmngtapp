@@ -5,32 +5,38 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  ScrollView,
   Alert,
   ActivityIndicator,
   Platform,
-  ScrollView,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useAppContext } from '../context/AppContext';
-import { useAuth } from '../context/AuthContext';
-import { apiService } from '../services/api';
-
 // Optional dependency to avoid type errors if not installed
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const DateTimePicker: any = (() => {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mod = require('@react-native-community/datetimepicker');
     return mod.default || mod;
   } catch {
     return null;
   }
 })();
+import { Ionicons } from '@expo/vector-icons';
+import { useAppContext } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
+import { apiService } from '../services/api';
 
 interface CreateTaskFormProps {
   onClose: () => void;
-  parentTaskId?: string;
+  parentTaskId?: string | null;
+  onTaskCreated?: (task: any) => void;
 }
 
-const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }) => {
+const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ 
+  onClose, 
+  parentTaskId = null, 
+  onTaskCreated 
+}) => {
   const { state, dispatch } = useAppContext();
   const { canManage } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
@@ -38,13 +44,17 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const [showHourMenu, setShowHourMenu] = useState(false);
   const [showMinuteMenu, setShowMinuteMenu] = useState(false);
-  const [showParentPicker, setShowParentPicker] = useState(false);
-  const [showParentMenu, setShowParentMenu] = useState(false);
-  const [parentSearch, setParentSearch] = useState('');
-  const [selectedParentId, setSelectedParentId] = useState<string | null>(parentTaskId || null);
   const [showProjectMenu, setShowProjectMenu] = useState(false);
   const [projectSearch, setProjectSearch] = useState('');
   const [projects, setProjects] = useState<any[]>([]);
+  const [showTeamMenu, setShowTeamMenu] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [teamSearch, setTeamSearch] = useState('');
+  const [userSearch, setUserSearch] = useState('');
+  const [teams, setTeams] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [hourValue, setHourValue] = useState<string>('0');
   const [minuteValue, setMinuteValue] = useState<string>('0');
   const [showDuePicker, setShowDuePicker] = useState(false);
@@ -54,6 +64,8 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
     description: '',
     project: '',
     assignee: '',
+    assignedTeams: [] as string[],
+    assignedUsers: [] as string[],
     status: 'To Do' as 'To Do' | 'In Progress' | 'Completed' | 'Overdue',
     priority: 'Medium' as 'Low' | 'Medium' | 'High',
     dueDate: '',
@@ -62,26 +74,52 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
     tags: '',
   });
 
-  // Fetch projects for dropdown
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const res = await apiService.getProjects();
-      if (mounted && res.success && res.data) {
-        try {
-          setProjects(res.data as any[]);
-        } catch {
-          setProjects([]);
-        }
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
-
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
       [field]: value,
+    }));
+  };
+
+  const handleTeamSelection = (teamId: string, teamName: string) => {
+    const newSelectedTeams = selectedTeams.includes(teamId)
+      ? selectedTeams.filter(id => id !== teamId)
+      : [...selectedTeams, teamId];
+    
+    setSelectedTeams(newSelectedTeams);
+    setFormData(prev => ({
+      ...prev,
+      assignedTeams: newSelectedTeams,
+    }));
+  };
+
+  const handleUserSelection = (userId: string, userName: string) => {
+    const newSelectedUsers = selectedUsers.includes(userId)
+      ? selectedUsers.filter(id => id !== userId)
+      : [...selectedUsers, userId];
+    
+    setSelectedUsers(newSelectedUsers);
+    setFormData(prev => ({
+      ...prev,
+      assignedUsers: newSelectedUsers,
+    }));
+  };
+
+  const removeTeam = (teamId: string) => {
+    const newSelectedTeams = selectedTeams.filter(id => id !== teamId);
+    setSelectedTeams(newSelectedTeams);
+    setFormData(prev => ({
+      ...prev,
+      assignedTeams: newSelectedTeams,
+    }));
+  };
+
+  const removeUser = (userId: string) => {
+    const newSelectedUsers = selectedUsers.filter(id => id !== userId);
+    setSelectedUsers(newSelectedUsers);
+    setFormData(prev => ({
+      ...prev,
+      assignedUsers: newSelectedUsers,
     }));
   };
 
@@ -106,8 +144,8 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
       return;
     }
 
-    if (!formData.assignee.trim()) {
-      Alert.alert('Error', 'Please enter an assignee');
+    if (!formData.assignee.trim() && selectedTeams.length === 0 && selectedUsers.length === 0) {
+      Alert.alert('Error', 'Please enter an assignee or select teams/users');
       return;
     }
 
@@ -119,6 +157,8 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
         description: formData.description.trim(),
         project: formData.project.trim(),
         assignee: formData.assignee.trim(),
+        assignedTeams: selectedTeams,
+        assignedUsers: selectedUsers,
         status: formData.status,
         priority: formData.priority,
         dueDate: formData.dueDate || new Date().toISOString().split('T')[0],
@@ -129,71 +169,143 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
         comments: '0',
         progress: 0,
         timeSpent: '0',
-        parentId: selectedParentId,
+        parentId: parentTaskId,
       };
 
       const response = await apiService.createTask(taskData);
 
       if (response.success && response.data) {
-        dispatch({ type: 'ADD_TASK', payload: response.data });
+        const finalTask = response.data;
+        
+        // Add to local state immediately for optimistic UI update
+        dispatch({ type: 'ADD_TASK', payload: finalTask });
 
-        // If this is a subtask, update the parent's subtasks array
-        if (selectedParentId) {
+        // Handle subtask relationship if this is a subtask
+        if (parentTaskId) {
           try {
-            const parentRes = await apiService.getTaskById(selectedParentId);
+            const parentRes = await apiService.getTaskById(parentTaskId);
             if (parentRes.success && parentRes.data) {
               const parent = parentRes.data;
               let subtasksArray: string[] = [];
               
+              // Parse existing subtasks safely
               try {
-                if (parent.subtasks && typeof parent.subtasks === 'string') {
-                  subtasksArray = JSON.parse(parent.subtasks);
-                } else if (Array.isArray(parent.subtasks)) {
-                  subtasksArray = parent.subtasks;
-                }
+                subtasksArray = typeof parent.subtasks === 'string' 
+                  ? JSON.parse(parent.subtasks) 
+                  : Array.isArray(parent.subtasks) ? parent.subtasks : [];
               } catch (e) {
                 subtasksArray = [];
               }
               
-              if (!subtasksArray.includes(response.data.id)) {
-                subtasksArray.push(response.data.id);
-                await apiService.updateTask(selectedParentId, { 
+              // Add new subtask ID if not present
+              if (!subtasksArray.includes(finalTask.id)) {
+                subtasksArray.push(finalTask.id);
+                await apiService.updateTask(parentTaskId, { 
                   subtasks: JSON.stringify(subtasksArray) 
                 } as any);
               }
             }
           } catch (e) {
-            console.warn('Failed to update parent task subtasks:', e);
+            console.warn('⚠️ Failed to update parent task:', e);
           }
         }
 
-        // Send WhatsApp notification
-        console.log('📱 Sending WhatsApp notification for task:', response.data.id);
+        // Send WhatsApp notification with assignment details
         try {
-          const notificationResponse = await apiService.sendWhatsAppNotification(response.data);
+          // Prepare assignment details for notification
+          const assignmentDetails = [];
+          
+          // Add manual assignee if provided
+          if (formData.assignee.trim()) {
+            assignmentDetails.push(`Manual Assignee: ${formData.assignee.trim()}`);
+          }
+          
+          // Add selected teams
+          if (selectedTeams.length > 0) {
+            const teamNames = selectedTeams.map(teamId => {
+              const team = teams.find(t => t.id === teamId || t.teamId === teamId || t.name === teamId);
+              return team?.name || team?.title || teamId;
+            });
+            assignmentDetails.push(`Teams: ${teamNames.join(', ')}`);
+          }
+          
+          // Add selected users
+          if (selectedUsers.length > 0) {
+            const userNames = selectedUsers.map(userId => {
+              const user = users.find(u => u.id === userId);
+              return user?.name || user?.username || userId;
+            });
+            assignmentDetails.push(`Users: ${userNames.join(', ')}`);
+          }
+          
+          // Create enhanced task data for notification with assignment details
+          const enhancedTaskData = {
+            ...finalTask,
+            assignmentDetails: assignmentDetails.length > 0 ? assignmentDetails.join(' | ') : 'Unassigned',
+            assignedTeams: selectedTeams,
+            assignedUsers: selectedUsers,
+            manualAssignee: formData.assignee.trim(),
+          };
+          
+          const notificationResponse = await apiService.sendWhatsAppNotification(enhancedTaskData as any);
           if (notificationResponse.success) {
-            console.log('✅ WhatsApp notification sent successfully');
+            console.log('✅ WhatsApp notification sent successfully with assignment details');
           } else {
             console.warn('⚠️ Failed to send WhatsApp notification:', notificationResponse.error);
           }
         } catch (notificationError) {
           console.error('❌ Error sending WhatsApp notification:', notificationError);
-          // Don't block the user if notification fails - just log it
         }
 
+        // Call the onTaskCreated callback if provided
+        if (onTaskCreated) {
+          onTaskCreated(finalTask);
+        }
+
+        // Prepare assignment details for the success message
+        const assignmentDetails = [];
+        
+        // Add manual assignee if provided
+        if (formData.assignee.trim()) {
+          assignmentDetails.push(`Manual Assignee: ${formData.assignee.trim()}`);
+        }
+        
+        // Add selected teams
+        if (selectedTeams.length > 0) {
+          const teamNames = selectedTeams.map(teamId => {
+            const team = teams.find(t => t.id === teamId || t.teamId === teamId || t.name === teamId);
+            return team?.name || team?.title || teamId;
+          });
+          assignmentDetails.push(`Teams: ${teamNames.join(', ')}`);
+        }
+        
+        // Add selected users
+        if (selectedUsers.length > 0) {
+          const userNames = selectedUsers.map(userId => {
+            const user = users.find(u => u.id === userId);
+            return user?.name || user?.username || userId;
+          });
+          assignmentDetails.push(`Users: ${userNames.join(', ')}`);
+        }
+        
+        // Create the assignment summary
+        const assignmentSummary = assignmentDetails.length > 0 
+          ? `\n\n📋 Assignments:\n${assignmentDetails.join('\n')}`
+          : '\n\n📋 Assignments: Unassigned';
+
+        // Show success alert with detailed assignment information
         Alert.alert(
-          'Success! ✅', 
-          `Task "${response.data.title}" has been created.\n\n📱 WhatsApp notification has been sent.`,
+          'Task Created Successfully! ✅', 
+          `Task "${finalTask.title}" has been created and saved.${assignmentSummary}`,
           [
             { 
               text: 'OK', 
-              onPress: () => {
-                onClose();
-              }
+              onPress: () => onClose()
             }
           ]
         );
       } else {
+        console.error('Task creation failed:', response.error);
         Alert.alert(
           'Creation Failed ❌', 
           response.error || 'Failed to create task. Please check your connection and try again.',
@@ -208,8 +320,48 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
     }
   };
 
+  // Fetch projects, teams, and users for dropdowns
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        // Fetch projects
+        const projectsRes = await apiService.getProjects();
+        if (mounted && projectsRes.success && projectsRes.data) {
+          setProjects(projectsRes.data as any[]);
+        }
+
+        // Fetch teams
+        const teamsRes = await apiService.getTeams();
+        if (mounted && teamsRes.success && teamsRes.data) {
+          setTeams(teamsRes.data as any[]);
+        }
+
+        // Fetch users from BRMH user table
+        const usersRes = await apiService.getUsers();
+        if (mounted && usersRes.success && usersRes.data) {
+          // Transform the user data to ensure we have the right structure
+          const transformedUsers = usersRes.data.map((user: any) => ({
+            id: user.id || user.userId || user.email,
+            name: user.name || user.username || user.email?.split('@')[0] || 'Unknown User',
+            email: user.email || '',
+            username: user.username || user.name || '',
+          }));
+          setUsers(transformedUsers);
+          console.log('👥 [CreateTaskForm] Fetched users:', transformedUsers.length);
+        } else {
+          console.warn('⚠️ [CreateTaskForm] Failed to fetch users:', usersRes.error);
+          setUsers([]);
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
       {/* Task Title */}
       <View style={styles.inputGroup}>
         <Text style={styles.label}>Task Title *</Text>
@@ -220,88 +372,6 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
           onChangeText={(value) => handleInputChange('title', value)}
         />
       </View>
-
-      {/* Parent Task (Optional) */}
-      {!parentTaskId && (
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Parent Task (optional)</Text>
-          <View style={styles.dropdownContainer}>
-            <TouchableOpacity
-              style={[styles.select]}
-              activeOpacity={0.8}
-              onPress={() => {
-                setShowParentMenu(prev => !prev);
-                // Close others to avoid overlap
-                setShowPriorityMenu(false);
-                setShowStatusMenu(false);
-                setShowHourMenu(false);
-                setShowMinuteMenu(false);
-                setShowProjectMenu(false);
-                setShowDuePicker(false);
-                setShowStartPicker(false);
-                setShowParentPicker(false);
-              }}
-            >
-              <Text style={styles.selectText} numberOfLines={1}>
-                {selectedParentId ? (state.tasks.find(t => t.id === selectedParentId)?.title || selectedParentId) : 'Select parent task'}
-              </Text>
-              {selectedParentId ? (
-                <TouchableOpacity onPress={() => setSelectedParentId(null)}>
-                  <Ionicons name="close-circle" size={18} color="#6b7280" />
-                </TouchableOpacity>
-              ) : (
-                <Ionicons name={showParentMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
-              )}
-            </TouchableOpacity>
-            {showParentMenu && (
-              <View style={[styles.selectMenu, { zIndex: 10000, elevation: 30, maxHeight: 280, position: 'absolute' }]}> 
-                <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: 'white' }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
-                    <Ionicons name="search" size={14} color="#9ca3af" />
-                    <TextInput
-                      value={parentSearch}
-                      onChangeText={setParentSearch}
-                      placeholder="Search tasks..."
-                      placeholderTextColor="#9ca3af"
-                      style={{ marginLeft: 6, flex: 1, color: '#111827', paddingVertical: 0 }}
-                    />
-                  </View>
-                </View>
-                <ScrollView
-                  keyboardShouldPersistTaps="always"
-                  nestedScrollEnabled
-                  scrollEnabled
-                  showsVerticalScrollIndicator
-                  onStartShouldSetResponderCapture={() => true}
-                  onMoveShouldSetResponderCapture={() => true}
-                  style={{ maxHeight: 260 }}
-                  contentContainerStyle={{ paddingBottom: 8 }}
-                >
-                  {state.tasks
-                    .filter(t => !t.parentId)
-                    .filter(t => !parentSearch.trim() || (t.title || '').toLowerCase().includes(parentSearch.toLowerCase()))
-                    .map(t => (
-                      <TouchableOpacity
-                        key={t.id}
-                        style={styles.selectOption}
-                        onPress={() => {
-                          setSelectedParentId(t.id);
-                          setShowParentMenu(false);
-                        }}
-                      >
-                        <Text style={styles.selectOptionText} numberOfLines={1}>{t.title || 'Untitled'}</Text>
-                        <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }} numberOfLines={1}>{t.project || 'No Project'} • {t.assignee || 'Unassigned'}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  {state.tasks.length === 0 && (
-                    <Text style={{ paddingHorizontal: 14, paddingVertical: 12, color: '#6b7280' }}>No tasks available</Text>
-                  )}
-                </ScrollView>
-              </View>
-            )}
-          </View>
-        </View>
-      )}
 
       {/* Description */}
       <View style={styles.inputGroup}>
@@ -317,22 +387,19 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
       </View>
 
       {/* Priority + Estimated Hours (Row) */}
-      <View style={[styles.inputGroup, styles.row, { zIndex: 2000 }] }>
-        <View style={[styles.col, styles.dropdownWrapper]}>
+      <View style={[styles.inputGroup, styles.row]}>
+        <View style={[styles.col, styles.priorityDropdownWrapper]}>
           <Text style={styles.label}>Priority</Text>
-          <View style={styles.dropdownContainer}>
+          <View style={styles.priorityDropdownContainer}>
             <TouchableOpacity
               style={styles.select}
               onPress={() => {
-                setShowPriorityMenu(prev => !prev);
-                // Close others to avoid overlap
-                setShowStatusMenu(false);
+                setShowPriorityMenu(!showPriorityMenu);
+                // Close other dropdowns when opening priority
                 setShowHourMenu(false);
                 setShowMinuteMenu(false);
                 setShowProjectMenu(false);
-                setShowDuePicker(false);
-                setShowStartPicker(false);
-                setShowParentPicker(false);
+                setShowStatusMenu(false);
               }}
               activeOpacity={0.8}
             >
@@ -344,7 +411,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
               />
             </TouchableOpacity>
             {showPriorityMenu && (
-              <View style={[styles.selectMenu, { zIndex: 10000, elevation: 30, maxHeight: 260 }]}> 
+              <View style={[styles.prioritySelectMenu]}>
                 {(['Low', 'Medium', 'High'] as const).map(p => (
                   <TouchableOpacity
                     key={p}
@@ -361,22 +428,19 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
             )}
           </View>
         </View>
-        <View style={[styles.col, styles.dropdownWrapper]}>
+        <View style={[styles.col, styles.hoursDropdownWrapper]}>
           <Text style={styles.label}>Estimated Hours</Text>
           <View style={styles.row}>
-            <View style={[styles.col, styles.dropdownWrapper]}>
+            <View style={[styles.col, styles.hourDropdownContainer]}>
               <TouchableOpacity
                 style={styles.select}
                 onPress={() => {
-                  setShowHourMenu(prev => !prev);
-                  // Close others
+                  setShowHourMenu(!showHourMenu);
                   setShowMinuteMenu(false);
+                  // Close other dropdowns when opening hours
                   setShowPriorityMenu(false);
-                  setShowStatusMenu(false);
                   setShowProjectMenu(false);
-                  setShowDuePicker(false);
-                  setShowStartPicker(false);
-                  setShowParentPicker(false);
+                  setShowStatusMenu(false);
                 }}
                 activeOpacity={0.8}
               >
@@ -384,38 +448,41 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
                 <Ionicons name={showHourMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
               </TouchableOpacity>
               {showHourMenu && (
-                <View style={[styles.selectMenu, { zIndex: 10000, elevation: 30, maxHeight: 220 }]}> 
-                  {Array.from({ length: 101 }).map((_, i) => (
-                    <TouchableOpacity
-                      key={`h-${i}`}
-                      style={styles.selectOption}
-                      onPress={() => {
-                        const v = String(i);
-                        setHourValue(v);
-                        const total = (i + (parseInt(minuteValue) || 0) / 60).toFixed(2);
-                        handleInputChange('estimatedHours', total);
-                        setShowHourMenu(false);
-                      }}
-                    >
-                      <Text style={styles.selectOptionText}>{i} h</Text>
-                    </TouchableOpacity>
-                  ))}
+                <View style={[styles.hourSelectMenu]}>
+                  <ScrollView 
+                    style={{ maxHeight: 200 }}
+                    showsVerticalScrollIndicator={true}
+                    nestedScrollEnabled={true}
+                  >
+                    {Array.from({ length: 101 }).map((_, i) => (
+                      <TouchableOpacity
+                        key={`h-${i}`}
+                        style={styles.selectOption}
+                        onPress={() => {
+                          const v = String(i);
+                          setHourValue(v);
+                          const total = (i + (parseInt(minuteValue) || 0) / 60).toFixed(2);
+                          handleInputChange('estimatedHours', total);
+                          setShowHourMenu(false);
+                        }}
+                      >
+                        <Text style={styles.selectOptionText}>{i} h</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
                 </View>
               )}
             </View>
-            <View style={[styles.col, styles.dropdownWrapper]}>
+            <View style={[styles.col, styles.minuteDropdownContainer]}>
               <TouchableOpacity
                 style={styles.select}
                 onPress={() => {
-                  setShowMinuteMenu(prev => !prev);
-                  // Close others
+                  setShowMinuteMenu(!showMinuteMenu);
                   setShowHourMenu(false);
+                  // Close other dropdowns when opening minutes
                   setShowPriorityMenu(false);
-                  setShowStatusMenu(false);
                   setShowProjectMenu(false);
-                  setShowDuePicker(false);
-                  setShowStartPicker(false);
-                  setShowParentPicker(false);
+                  setShowStatusMenu(false);
                 }}
                 activeOpacity={0.8}
               >
@@ -423,7 +490,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
                 <Ionicons name={showMinuteMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
               </TouchableOpacity>
               {showMinuteMenu && (
-                <View style={[styles.selectMenu, { zIndex: 10000, elevation: 30, maxHeight: 220 }] }>
+                <View style={[styles.minuteSelectMenu]}>
                   {[0, 15, 30, 45].map(m => (
                     <TouchableOpacity
                       key={`m-${m}`}
@@ -447,7 +514,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
       </View>
 
       {/* Dates (Row) */}
-      <View style={[styles.inputGroup, styles.row, { zIndex: 1000 }] }>
+      <View style={[styles.inputGroup, styles.row]}>
         <View style={[styles.col, styles.dateCol]}>
           <Text style={styles.label}>Start Date</Text>
           <TouchableOpacity
@@ -457,15 +524,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
                 Alert.alert('Date picker unavailable', 'This screen requires @react-native-community/datetimepicker and a native device/emulator. On web the calendar will not open.');
                 return;
               }
-              // Close others, open start picker
               setShowStartPicker(true);
-              setShowDuePicker(false);
-              setShowPriorityMenu(false);
-              setShowStatusMenu(false);
-              setShowHourMenu(false);
-              setShowMinuteMenu(false);
-              setShowProjectMenu(false);
-              setShowParentPicker(false);
             }}
           >
             <View style={[styles.input, styles.dateButton]}>
@@ -498,15 +557,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
                 Alert.alert('Date picker unavailable', 'This screen requires @react-native-community/datetimepicker and a native device/emulator. On web the calendar will not open.');
                 return;
               }
-              // Close others, open due picker
               setShowDuePicker(true);
-              setShowStartPicker(false);
-              setShowPriorityMenu(false);
-              setShowStatusMenu(false);
-              setShowHourMenu(false);
-              setShowMinuteMenu(false);
-              setShowProjectMenu(false);
-              setShowParentPicker(false);
             }}
           >
             <View style={[styles.input, styles.dateButton]}> 
@@ -533,21 +584,18 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
       </View>
 
       {/* Project */}
-      <View style={[styles.inputGroup, styles.dropdownWrapper]}>
+      <View style={[styles.inputGroup, styles.projectDropdownWrapper]}>
         <Text style={styles.label}>Project *</Text>
-        <View style={styles.dropdownContainer}>
+        <View style={styles.projectDropdownContainer}>
           <TouchableOpacity
             style={styles.select}
             onPress={() => {
-              setShowProjectMenu(prev => !prev);
-              // Close others
+              setShowProjectMenu(!showProjectMenu);
+              // Close other dropdowns when opening project
               setShowPriorityMenu(false);
-              setShowStatusMenu(false);
               setShowHourMenu(false);
               setShowMinuteMenu(false);
-              setShowDuePicker(false);
-              setShowStartPicker(false);
-              setShowParentPicker(false);
+              setShowStatusMenu(false);
             }}
             activeOpacity={0.8}
           >
@@ -555,7 +603,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
             <Ionicons name={showProjectMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
           </TouchableOpacity>
           {showProjectMenu && (
-            <View style={[styles.selectMenu, { zIndex: 10000, elevation: 30, maxHeight: 280, position: 'absolute' }]}> 
+            <View style={[styles.projectSelectMenu]}> 
               <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: 'white' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
                   <Ionicons name="search" size={14} color="#9ca3af" />
@@ -569,14 +617,11 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
                 </View>
               </View>
               <ScrollView
-                keyboardShouldPersistTaps="always"
+                keyboardShouldPersistTaps="handled"
                 nestedScrollEnabled
-                scrollEnabled
-                showsVerticalScrollIndicator
-                onStartShouldSetResponderCapture={() => true}
-                onMoveShouldSetResponderCapture={() => true}
-                style={{ maxHeight: 260 }}
+                style={{ maxHeight: 220 }}
                 contentContainerStyle={{ paddingBottom: 8 }}
+                showsVerticalScrollIndicator={true}
               >
                 {(projects || [])
                   .filter(p => !projectSearch.trim() || (p.name || p.title || '').toLowerCase().includes(projectSearch.toLowerCase()))
@@ -598,49 +643,280 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
         </View>
       </View>
 
-      {/* Assigned To + Status (Row) */}
-      <View style={[styles.inputGroup, styles.row, { zIndex: 2000 }]}>
-        <View style={[styles.col, { flex: 0.6 }]}>
-          <Text style={styles.label}>Assigned To *</Text>
+      {/* Assignment Section */}
+      <View style={styles.inputGroup}>
+        <Text style={styles.label}>Assignment *</Text>
+        
+        {/* Manual Assignee Input */}
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { fontSize: 12, color: '#6b7280' }]}>Manual Assignee (Optional)</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter assignee name"
+            placeholder="Enter assignee name manually"
             value={formData.assignee}
             onChangeText={(value) => handleInputChange('assignee', value)}
           />
         </View>
-        <View style={[styles.col, styles.dropdownWrapper, { flex: 0.4 }]}>
-          <Text style={styles.label}>Status *</Text>
-          <View style={styles.dropdownContainer}>
-            <TouchableOpacity
-              style={styles.select}
-              onPress={() => setShowStatusMenu(!showStatusMenu)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.selectText}>{formData.status}</Text>
-              <Ionicons
-                name={showStatusMenu ? 'chevron-up' : 'chevron-down'}
-                size={16}
-                color="#6b7280"
-              />
-            </TouchableOpacity>
-            {showStatusMenu && (
-              <View style={[styles.selectMenu, { zIndex: 1000, elevation: 20 }]}>
-                {(['To Do', 'In Progress', 'Completed', 'Overdue'] as const).map(s => (
-                  <TouchableOpacity
-                    key={s}
-                    style={styles.selectOption}
-                    onPress={() => {
-                      handleInputChange('status', s);
-                      setShowStatusMenu(false);
-                    }}
-                  >
-                    <Text style={styles.selectOptionText}>{s}</Text>
-                  </TouchableOpacity>
-                ))}
+
+        {/* Selected Teams and Users Display */}
+        {(selectedTeams.length > 0 || selectedUsers.length > 0) && (
+          <View style={styles.selectedItemsContainer}>
+            <Text style={[styles.label, { fontSize: 12, color: '#6b7280', marginBottom: 8 }]}>Selected Assignments:</Text>
+            
+            {/* Selected Teams */}
+            {selectedTeams.length > 0 && (
+              <View style={styles.selectedItemsRow}>
+                <Text style={styles.selectedItemsLabel}>Teams:</Text>
+                <View style={styles.selectedItemsList}>
+                  {selectedTeams.map(teamId => {
+                    const team = teams.find(t => t.id === teamId);
+                    return (
+                      <View key={teamId} style={styles.selectedItem}>
+                        <Text style={styles.selectedItemText}>{team?.name || teamId}</Text>
+                        <TouchableOpacity onPress={() => removeTeam(teamId)}>
+                          <Ionicons name="close-circle" size={16} color="#ef4444" />
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* Selected Users */}
+            {selectedUsers.length > 0 && (
+              <View style={styles.selectedItemsRow}>
+                <Text style={styles.selectedItemsLabel}>Users:</Text>
+                <View style={styles.selectedItemsList}>
+                  {selectedUsers.map(userId => {
+                    const user = users.find(u => u.id === userId);
+                    return (
+                      <View key={userId} style={styles.selectedItem}>
+                        <Text style={styles.selectedItemText}>{user?.name || userId}</Text>
+                        <TouchableOpacity onPress={() => removeUser(userId)}>
+                          <Ionicons name="close-circle" size={16} color="#ef4444" />
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
               </View>
             )}
           </View>
+        )}
+
+        {/* Team and User Selection Buttons */}
+        <View style={styles.row}>
+          <View style={[styles.col, styles.teamDropdownWrapper]}>
+            <TouchableOpacity
+              style={styles.select}
+              onPress={() => {
+                setShowTeamMenu(!showTeamMenu);
+                setShowUserMenu(false);
+                // Close other dropdowns
+                setShowPriorityMenu(false);
+                setShowHourMenu(false);
+                setShowMinuteMenu(false);
+                setShowProjectMenu(false);
+                setShowStatusMenu(false);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.selectText}>Select Teams</Text>
+              <Ionicons name={showTeamMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
+            </TouchableOpacity>
+            {showTeamMenu && (
+              <View style={[styles.teamSelectMenu]}>
+                <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: 'white' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+                    <Ionicons name="search" size={14} color="#9ca3af" />
+                    <TextInput
+                      value={teamSearch}
+                      onChangeText={setTeamSearch}
+                      placeholder="Search teams"
+                      placeholderTextColor="#9ca3af"
+                      style={{ marginLeft: 6, flex: 1, color: '#111827', paddingVertical: 0 }}
+                    />
+                  </View>
+                </View>
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled={true}
+                  style={{ maxHeight: 250 }}
+                  contentContainerStyle={{ paddingBottom: 8 }}
+                  showsVerticalScrollIndicator={true}
+                  bounces={false}
+                >
+                  {(teams || [])
+                    .filter(t => !teamSearch.trim() || (t.name || t.title || '').toLowerCase().includes(teamSearch.toLowerCase()))
+                    .map((team, idx) => (
+                      <TouchableOpacity
+                        key={team.id || team.teamId || team.name || String(idx)}
+                        style={[
+                          styles.selectOption,
+                          selectedTeams.includes(team.id || team.teamId || team.name) && styles.selectedOption
+                        ]}
+                        onPress={() => handleTeamSelection(team.id || team.teamId || team.name, team.name || team.title || '')}
+                      >
+                        <View style={styles.optionContent}>
+                          <Text style={[
+                            styles.selectOptionText,
+                            selectedTeams.includes(team.id || team.teamId || team.name) && styles.selectedOptionText
+                          ]}>
+                            {team.name || team.title || '-'}
+                          </Text>
+                          {selectedTeams.includes(team.id || team.teamId || team.name) && (
+                            <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  {teams.length === 0 && (
+                    <View style={styles.emptyState}>
+                      <Text style={styles.emptyStateText}>No teams found</Text>
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            )}
+          </View>
+
+          <View style={[styles.col, styles.userDropdownWrapper]}>
+            <TouchableOpacity
+              style={styles.select}
+              onPress={() => {
+                setShowUserMenu(!showUserMenu);
+                setShowTeamMenu(false);
+                // Close other dropdowns
+                setShowPriorityMenu(false);
+                setShowHourMenu(false);
+                setShowMinuteMenu(false);
+                setShowProjectMenu(false);
+                setShowStatusMenu(false);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.selectText}>Select Users</Text>
+              <Ionicons name={showUserMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
+            </TouchableOpacity>
+            {showUserMenu && (
+              <View style={[styles.userSelectMenu]}>
+                <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: 'white' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+                    <Ionicons name="search" size={14} color="#9ca3af" />
+                    <TextInput
+                      value={userSearch}
+                      onChangeText={setUserSearch}
+                      placeholder="Search users"
+                      placeholderTextColor="#9ca3af"
+                      style={{ marginLeft: 6, flex: 1, color: '#111827', paddingVertical: 0 }}
+                    />
+                  </View>
+                </View>
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled={true}
+                  style={{ maxHeight: 250 }}
+                  contentContainerStyle={{ paddingBottom: 8 }}
+                  showsVerticalScrollIndicator={true}
+                  bounces={false}
+                >
+                  {(users || [])
+                    .filter(u => {
+                      const searchTerm = userSearch.toLowerCase();
+                      const name = (u.name || '').toLowerCase();
+                      const email = (u.email || '').toLowerCase();
+                      const username = (u.username || '').toLowerCase();
+                      return !searchTerm || name.includes(searchTerm) || email.includes(searchTerm) || username.includes(searchTerm);
+                    })
+                    .map((user, idx) => (
+                      <TouchableOpacity
+                        key={user.id || String(idx)}
+                        style={[
+                          styles.selectOption,
+                          selectedUsers.includes(user.id) && styles.selectedOption
+                        ]}
+                        onPress={() => handleUserSelection(user.id, user.name || user.email || '')}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.optionContent}>
+                          <View style={styles.userInfo}>
+                            <Text style={[
+                              styles.selectOptionText,
+                              selectedUsers.includes(user.id) && styles.selectedOptionText
+                            ]}>
+                              {user.name || user.username || 'Unknown User'}
+                            </Text>
+                            {user.email && (
+                              <Text style={[styles.selectOptionText, { fontSize: 12, color: '#6b7280', marginTop: 2 }]}>
+                                {user.email}
+                              </Text>
+                            )}
+                            {user.username && user.username !== user.name && (
+                              <Text style={[styles.selectOptionText, { fontSize: 11, color: '#9ca3af', marginTop: 1 }]}>
+                                @{user.username}
+                              </Text>
+                            )}
+                          </View>
+                          {selectedUsers.includes(user.id) && (
+                            <Ionicons name="checkmark-circle" size={18} color="#10b981" />
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  {users.length === 0 && (
+                    <View style={styles.emptyState}>
+                      <Text style={styles.emptyStateText}>No users found</Text>
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+
+      {/* Status */}
+      <View style={[styles.inputGroup, styles.statusDropdownWrapper]}>
+        <Text style={styles.label}>Status *</Text>
+        <View style={styles.statusDropdownContainer}>
+          <TouchableOpacity
+            style={styles.select}
+            onPress={() => {
+              setShowStatusMenu(!showStatusMenu);
+              // Close other dropdowns when opening status
+              setShowPriorityMenu(false);
+              setShowHourMenu(false);
+              setShowMinuteMenu(false);
+              setShowProjectMenu(false);
+              setShowTeamMenu(false);
+              setShowUserMenu(false);
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.selectText}>{formData.status}</Text>
+            <Ionicons
+              name={showStatusMenu ? 'chevron-up' : 'chevron-down'}
+              size={16}
+              color="#6b7280"
+            />
+          </TouchableOpacity>
+          {showStatusMenu && (
+            <View style={[styles.statusSelectMenu]}>
+              {(['To Do', 'In Progress', 'Completed', 'Overdue'] as const).map(s => (
+                <TouchableOpacity
+                  key={s}
+                  style={styles.selectOption}
+                  onPress={() => {
+                    handleInputChange('status', s);
+                    setShowStatusMenu(false);
+                  }}
+                >
+                  <Text style={styles.selectOptionText}>{s}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
       </View>
 
@@ -678,17 +954,15 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ onClose, parentTaskId }
           )}
         </TouchableOpacity>
       </View>
-
-      {/* Parent menu now inline like project dropdown */}
-    </View>
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  content: {
+    flex: 1,
     paddingHorizontal: 16,
     paddingTop: 16,
-    overflow: 'visible',
   },
   inputGroup: {
     marginBottom: 20,
@@ -733,7 +1007,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  selectMenu: {
+  // Priority dropdown styles
+  priorityDropdownWrapper: {
+    zIndex: 5000,
+    elevation: 25,
+  },
+  priorityDropdownContainer: {
+    position: 'relative',
+    zIndex: 5000,
+  },
+  prioritySelectMenu: {
     position: 'absolute',
     top: 44,
     left: 0,
@@ -743,21 +1026,218 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
     shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 30,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 25,
     overflow: 'hidden',
-    zIndex: 12000,
+    zIndex: 5000,
   },
-  dropdownContainer: {
+  // Hours dropdown styles
+  hoursDropdownWrapper: {
+    zIndex: 4000,
+    elevation: 20,
+  },
+  hourDropdownContainer: {
     position: 'relative',
-    zIndex: 11000,
-    overflow: 'visible',
+    zIndex: 4000,
   },
-  dropdownWrapper: {
-    zIndex: 11500,
-    elevation: 28,
-    overflow: 'visible',
+  hourSelectMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 20,
+    overflow: 'hidden',
+    zIndex: 4000,
+  },
+  // Minutes dropdown styles
+  minuteDropdownContainer: {
+    position: 'relative',
+    zIndex: 4000,
+  },
+  minuteSelectMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 20,
+    overflow: 'hidden',
+    zIndex: 4000,
+  },
+  // Project dropdown styles
+  projectDropdownWrapper: {
+    zIndex: 3000,
+    elevation: 15,
+  },
+  projectDropdownContainer: {
+    position: 'relative',
+    zIndex: 3000,
+  },
+  projectSelectMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 15,
+    overflow: 'hidden',
+    zIndex: 3000,
+  },
+  // Team dropdown styles
+  teamDropdownWrapper: {
+    zIndex: 1500,
+    elevation: 8,
+  },
+  teamSelectMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+    overflow: 'hidden',
+    zIndex: 1500,
+  },
+  // User dropdown styles
+  userDropdownWrapper: {
+    zIndex: 1500,
+    elevation: 8,
+  },
+  userSelectMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+    overflow: 'hidden',
+    zIndex: 1500,
+  },
+  // Status dropdown styles
+  statusDropdownWrapper: {
+    zIndex: 1000,
+    elevation: 5,
+  },
+  statusDropdownContainer: {
+    position: 'relative',
+    zIndex: 1000,
+  },
+  statusSelectMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    overflow: 'hidden',
+    zIndex: 1000,
+  },
+  // Selected items styles
+  selectedItemsContainer: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  selectedItemsRow: {
+    marginBottom: 8,
+  },
+  selectedItemsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  selectedItemsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  selectedItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#dbeafe',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#93c5fd',
+  },
+  selectedItemText: {
+    fontSize: 12,
+    color: '#1e40af',
+    marginRight: 4,
+  },
+  // Option content styles
+  optionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  selectedOption: {
+    backgroundColor: '#f0f9ff',
+    borderLeftWidth: 3,
+    borderLeftColor: '#0ea5e9',
+  },
+  selectedOptionText: {
+    color: '#0c4a6e',
+    fontWeight: '600',
+  },
+  // User info styles
+  userInfo: {
+    flex: 1,
+  },
+  // Empty state styles
+  emptyState: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#9ca3af',
+    fontStyle: 'italic',
   },
   dateCol: {
     zIndex: 0,
