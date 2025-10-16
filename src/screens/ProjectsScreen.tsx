@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Dimensions, TextInput, Modal, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Dimensions, TextInput, Modal, ScrollView, Alert, Platform } from 'react-native';
+import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import ProfileHeader from '../components/ProfileHeader';
 import { useAuth } from '../context/AuthContext';
@@ -40,6 +41,21 @@ const ProjectsScreen = ({ navigation }: any) => {
     tags: '[]',
     notes: '',
   });
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [priorityOpen, setPriorityOpen] = useState(false);
+  const statusOptions = ['Planning','Active','Completed','On Hold'];
+  const priorityOptions = ['Low','Medium','High'];
+  const [teamsOptions, setTeamsOptions] = useState<any[]>([]);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+  const [usersOptions, setUsersOptions] = useState<any[]>([]);
+  const [teamSearch, setTeamSearch] = useState('');
+  const [userSearch, setUserSearch] = useState('');
+  const [showTeamMenu, setShowTeamMenu] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [tasksOptions, setTasksOptions] = useState<any[]>([]);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [taskSearch, setTaskSearch] = useState('');
+  const [showTaskMenu, setShowTaskMenu] = useState(false);
 
   const setField = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -62,10 +78,10 @@ const ProjectsScreen = ({ navigation }: any) => {
       startDate: form.startDate,
       endDate: form.endDate,
       budget: form.budget.trim(),
-      team: form.team,
+      team: selectedTeamIds.length ? selectedTeamIds : form.team,
       assignee: form.assignee,
       progress: Math.max(0, Math.min(100, Number(form.progress) || 0)),
-      tasks: form.tasks?.trim() || '[]',
+      tasks: selectedTaskIds.length ? JSON.stringify(selectedTaskIds) : '[]',
       tags: form.tags?.trim() || '[]',
       notes: form.notes,
     } as any;
@@ -75,6 +91,25 @@ const ProjectsScreen = ({ navigation }: any) => {
     if (res.success) {
       setShowCreateProjectModal(false);
       await fetchProjects();
+      // Reset form
+      setSelectedTeamIds([]);
+      setSelectedTaskIds([]);
+      setForm({
+        name: '',
+        description: '',
+        company: '',
+        status: 'Planning',
+        priority: 'Medium',
+        startDate: '',
+        endDate: '',
+        budget: '',
+        team: '',
+        assignee: '',
+        progress: '0',
+        tasks: '[]',
+        tags: '[]',
+        notes: '',
+      });
     } else {
       alert(res.error || 'Failed to create project');
     }
@@ -90,6 +125,40 @@ const ProjectsScreen = ({ navigation }: any) => {
   useEffect(() => {
     fetchProjects();
   }, []);
+
+  // Load teams, users, and tasks when opening create modal
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [teamsRes, usersRes, tasksRes] = await Promise.all([
+          apiService.getTeams(),
+          apiService.getUsers(),
+          apiService.getTasks()
+        ]);
+        
+        if (teamsRes.success && teamsRes.data) {
+          setTeamsOptions(teamsRes.data);
+        }
+        
+        if (usersRes.success && usersRes.data) {
+          const transformedUsers = usersRes.data.map((user: any) => ({
+            id: user.id || user.userId || user.email,
+            name: user.name || user.username || user.email?.split('@')[0] || 'Unknown User',
+            email: user.email || '',
+            username: user.username || user.name || '',
+          }));
+          setUsersOptions(transformedUsers);
+        }
+        
+        if (tasksRes.success && tasksRes.data) {
+          setTasksOptions(tasksRes.data);
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      }
+    };
+    if (showCreateProjectModal) fetchData();
+  }, [showCreateProjectModal]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -618,28 +687,266 @@ const ProjectsScreen = ({ navigation }: any) => {
             </View>
 
             <ScrollView style={styles.projectDetailsContent} showsVerticalScrollIndicator={false}>
+              {/* Dropdown Overlay - Close dropdowns when clicking outside */}
+              {(statusOpen || priorityOpen || showTeamMenu || showUserMenu || showTaskMenu) && (
+                <TouchableOpacity
+                  style={styles.dropdownOverlay}
+                  activeOpacity={1}
+                  onPress={() => {
+                    setStatusOpen(false);
+                    setPriorityOpen(false);
+                    setShowTeamMenu(false);
+                    setShowUserMenu(false);
+                    setShowTaskMenu(false);
+                  }}
+                />
+              )}
+              
               <View style={{ paddingVertical: 12, gap: 12 }}>
                 <ProjectField label="Project Name *" value={form.name} onChange={(t: string) => setField('name', t)} placeholder="Enter project name" />
                 <ProjectField label="Description" value={form.description} onChange={(t: string) => setField('description', t)} placeholder="Optional description" multiline />
                 <ProjectField label="Company *" value={form.company} onChange={(t: string) => setField('company', t)} placeholder="company-id-123" />
-                <View style={{ flexDirection: 'row', gap: 12 }}>
-                  <ProjectField label="Status *" value={form.status} onChange={(t: string) => setField('status', t)} placeholder="Planning / Active / Completed / On Hold" style={{ flex: 1 }} />
-                  <ProjectField label="Priority *" value={form.priority} onChange={(t: string) => setField('priority', t)} placeholder="Low / Medium / High" style={{ flex: 1 }} />
+                
+                {/* Status and Priority Row */}
+                <View style={[formStyles.row, { zIndex: 5000 }]}>
+                  <View style={[formStyles.col, formStyles.statusDropdownWrapper]}>
+                    <Text style={formStyles.label}>Status *</Text>
+                    <View style={formStyles.dropdownContainer}>
+                      <TouchableOpacity
+                        style={formStyles.select}
+                        onPress={() => {
+                          setStatusOpen(!statusOpen);
+                          setPriorityOpen(false);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={formStyles.selectText}>{form.status}</Text>
+                        <Ionicons name={statusOpen ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
+                      </TouchableOpacity>
+                      {statusOpen && (
+                        <View style={formStyles.selectMenu}>
+                          {statusOptions.map(option => (
+                            <TouchableOpacity
+                              key={option}
+                              style={formStyles.selectOption}
+                              onPress={() => {
+                                setField('status', option);
+                                setStatusOpen(false);
+                              }}
+                            >
+                              <Text style={formStyles.selectOptionText}>{option}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                  
+                  <View style={[formStyles.col, formStyles.priorityDropdownWrapper]}>
+                    <Text style={formStyles.label}>Priority *</Text>
+                    <View style={formStyles.dropdownContainer}>
+                      <TouchableOpacity
+                        style={formStyles.select}
+                        onPress={() => {
+                          setPriorityOpen(!priorityOpen);
+                          setStatusOpen(false);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={formStyles.selectText}>{form.priority}</Text>
+                        <Ionicons name={priorityOpen ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
+                      </TouchableOpacity>
+                      {priorityOpen && (
+                        <View style={formStyles.selectMenu}>
+                          {priorityOptions.map(option => (
+                            <TouchableOpacity
+                              key={option}
+                              style={formStyles.selectOption}
+                              onPress={() => {
+                                setField('priority', option);
+                                setPriorityOpen(false);
+                              }}
+                            >
+                              <Text style={formStyles.selectOptionText}>{option}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  </View>
                 </View>
-                <View style={{ flexDirection: 'row', gap: 12 }}>
-                  <ProjectField label="Start Date *" value={form.startDate} onChange={(t: string) => setField('startDate', t)} placeholder="YYYY-MM-DD" style={{ flex: 1 }} />
-                  <ProjectField label="End Date *" value={form.endDate} onChange={(t: string) => setField('endDate', t)} placeholder="YYYY-MM-DD" style={{ flex: 1 }} />
+                
+                {/* Dates Row */}
+                <View style={{ flexDirection: 'row', gap: 12, zIndex: 0 }}>
+                  <DateField
+                    label="Start Date *"
+                    value={form.startDate}
+                    onPick={(dateStr: string) => setField('startDate', dateStr)}
+                    style={{ flex: 1 }}
+                  />
+                  <DateField
+                    label="End Date *"
+                    value={form.endDate}
+                    onPick={(dateStr: string) => setField('endDate', dateStr)}
+                    style={{ flex: 1 }}
+                  />
                 </View>
-                <View style={{ flexDirection: 'row', gap: 12 }}>
+                
+                {/* Budget and Progress Row */}
+                <View style={{ flexDirection: 'row', gap: 12, zIndex: 0 }}>
                   <ProjectField label="Budget *" value={form.budget} onChange={(t: string) => setField('budget', t)} placeholder="50000" style={{ flex: 1 }} />
                   <ProjectField label="Progress *" value={form.progress} onChange={(t: string) => setField('progress', t)} placeholder="0-100" style={{ flex: 1 }} />
                 </View>
-                <View style={{ flexDirection: 'row', gap: 12 }}>
-                  <ProjectField label="Team *" value={form.team} onChange={(t: string) => setField('team', t)} placeholder="team-id-456" style={{ flex: 1 }} />
-                  <ProjectField label="Assignee *" value={form.assignee} onChange={(t: string) => setField('assignee', t)} placeholder="user-id-789" style={{ flex: 1 }} />
+                
+                {/* Teams and Assignee Assignment */}
+                <View style={formStyles.assignmentGroup}>
+                  <Text style={formStyles.label}>Assignment *</Text>
+                  
+                  {/* Selected Teams/Users Pills */}
+                  {(selectedTeamIds.length > 0 || form.assignee) && (
+                    <ScrollView 
+                      horizontal 
+                      showsHorizontalScrollIndicator={false}
+                      style={formStyles.selectedItemsContainer}
+                      contentContainerStyle={formStyles.selectedItemsContent}
+                    >
+                      {selectedTeamIds.map(teamId => {
+                        const team = teamsOptions.find(t => (t.id || t.teamId) === teamId);
+                        return (
+                          <View key={teamId} style={formStyles.selectedItem}>
+                            <Text style={formStyles.selectedItemText}>{team?.name || teamId}</Text>
+                            <TouchableOpacity onPress={() => setSelectedTeamIds(selectedTeamIds.filter(id => id !== teamId))}>
+                              <Ionicons name="close-circle" size={16} color="#ef4444" />
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })}
+                      {form.assignee && (
+                        <View style={formStyles.selectedItem}>
+                          <Text style={formStyles.selectedItemText}>
+                            {usersOptions.find(u => u.id === form.assignee)?.name || form.assignee}
+                          </Text>
+                          <TouchableOpacity onPress={() => setField('assignee', '')}>
+                            <Ionicons name="close-circle" size={16} color="#ef4444" />
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </ScrollView>
+                  )}
+                  
+                  {/* Team and User Selection Buttons */}
+                  <View style={[formStyles.row, { zIndex: 4000 }]}>
+                    <View style={[formStyles.col, formStyles.teamDropdownWrapper]}>
+                      <TouchableOpacity
+                        style={formStyles.select}
+                        onPress={() => {
+                          setShowTeamMenu(!showTeamMenu);
+                          setShowUserMenu(false);
+                          setStatusOpen(false);
+                          setPriorityOpen(false);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={formStyles.selectText}>Select Teams</Text>
+                        <Ionicons name={showTeamMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
+                      </TouchableOpacity>
+                      <TeamMultiSelectEnhanced
+                        teams={teamsOptions}
+                        selectedIds={selectedTeamIds}
+                        setSelectedIds={setSelectedTeamIds}
+                        teamSearch={teamSearch}
+                        setTeamSearch={setTeamSearch}
+                        showMenu={showTeamMenu}
+                      />
+                    </View>
+                    
+                    <View style={[formStyles.col, formStyles.userDropdownWrapper]}>
+                      <TouchableOpacity
+                        style={formStyles.select}
+                        onPress={() => {
+                          setShowUserMenu(!showUserMenu);
+                          setShowTeamMenu(false);
+                          setStatusOpen(false);
+                          setPriorityOpen(false);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={formStyles.selectText}>Select Assignee</Text>
+                        <Ionicons name={showUserMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
+                      </TouchableOpacity>
+                      <UserSelectEnhanced
+                        users={usersOptions}
+                        selectedId={form.assignee}
+                        setSelectedId={(id: string) => {
+                          setField('assignee', id);
+                          setShowUserMenu(false);
+                        }}
+                        userSearch={userSearch}
+                        setUserSearch={setUserSearch}
+                        showMenu={showUserMenu}
+                      />
+                    </View>
+                  </View>
                 </View>
-                <ProjectField label="Tasks (JSON) *" value={form.tasks} onChange={(t: string) => setField('tasks', t)} placeholder='["id1","id2"] or []' />
-                <ProjectField label="Tags (JSON) *" value={form.tags} onChange={(t: string) => setField('tags', t)} placeholder='["web","frontend"]' />
+                
+                {/* Tasks Selection */}
+                <View style={formStyles.assignmentGroup}>
+                  <Text style={formStyles.label}>Tasks</Text>
+                  
+                  {/* Selected Tasks Pills */}
+                  {selectedTaskIds.length > 0 && (
+                    <ScrollView 
+                      horizontal 
+                      showsHorizontalScrollIndicator={false}
+                      style={formStyles.selectedItemsContainer}
+                      contentContainerStyle={formStyles.selectedItemsContent}
+                    >
+                      {selectedTaskIds.map(taskId => {
+                        const task = tasksOptions.find(t => (t.id || t.taskId) === taskId);
+                        return (
+                          <View key={taskId} style={formStyles.selectedItem}>
+                            <Text style={formStyles.selectedItemText} numberOfLines={1}>
+                              {task?.title || task?.name || taskId}
+                            </Text>
+                            <TouchableOpacity onPress={() => setSelectedTaskIds(selectedTaskIds.filter(id => id !== taskId))}>
+                              <Ionicons name="close-circle" size={16} color="#ef4444" />
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })}
+                    </ScrollView>
+                  )}
+                  
+                  {/* Task Selection Button */}
+                  <View style={[formStyles.col, formStyles.taskDropdownWrapper, { zIndex: 3000 }]}>
+                    <TouchableOpacity
+                      style={formStyles.select}
+                      onPress={() => {
+                        setShowTaskMenu(!showTaskMenu);
+                        setShowTeamMenu(false);
+                        setShowUserMenu(false);
+                        setStatusOpen(false);
+                        setPriorityOpen(false);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={formStyles.selectText}>
+                        {selectedTaskIds.length > 0 ? `${selectedTaskIds.length} task(s) selected` : 'Select Tasks'}
+                      </Text>
+                      <Ionicons name={showTaskMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
+                    </TouchableOpacity>
+                    <TaskMultiSelectEnhanced
+                      tasks={tasksOptions}
+                      selectedIds={selectedTaskIds}
+                      setSelectedIds={setSelectedTaskIds}
+                      taskSearch={taskSearch}
+                      setTaskSearch={setTaskSearch}
+                      showMenu={showTaskMenu}
+                    />
+                  </View>
+                </View>
+                
+                <ProjectField label="Tags" value={form.tags} onChange={(t: string) => setField('tags', t)} placeholder='["web","frontend"]' />
                 <ProjectField label="Notes" value={form.notes} onChange={(t: string) => setField('notes', t)} placeholder="Optional notes" />
 
                 <TouchableOpacity style={styles.submitBtn} disabled={isSubmitting} onPress={submit}>
@@ -661,7 +968,7 @@ const ProjectsScreen = ({ navigation }: any) => {
 const cardWidth = (width - 16 * 2 - 8) / 2;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f6f7f8' },
+  container: { flex: 1, backgroundColor: '#f6f7f8', paddingBottom: 80 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1f2937' },
@@ -885,6 +1192,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
+  dropdownOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2000,
+  },
 });
 
 // Helper components & functions to mirror Tasks pills
@@ -976,5 +1291,519 @@ const ProjectField = ({ label, value, onChange, placeholder, multiline, style }:
     />
   </View>
 );
+
+// Date field using native date picker on Android; on iOS, fallback to text input
+const DateField = ({ label, value, onPick, style }: { label: string; value: string; onPick: (dateStr: string) => void; style?: any }) => {
+  const openPicker = () => {
+    if (Platform.OS === 'android') {
+      const current = value ? new Date(value) : new Date();
+      DateTimePickerAndroid.open({
+        value: current,
+        onChange: (_: any, date?: Date) => {
+          if (date) onPick(date.toISOString().slice(0,10));
+        },
+        mode: 'date',
+        is24Hour: true,
+      });
+    }
+  };
+  return (
+    <View style={[{ flex: 1 }, style]}>
+      <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>{label}</Text>
+      <TouchableOpacity onPress={openPicker} activeOpacity={0.8} style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 14, color: value ? '#111827' : '#9ca3af' }}>{value || 'YYYY-MM-DD'}</Text>
+        <Ionicons name="calendar-outline" size={16} color="#6b7280" />
+      </TouchableOpacity>
+      {Platform.OS === 'ios' && (
+        <TextInput
+          value={value}
+          onChangeText={onPick}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor="#9ca3af"
+          style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#111827', marginTop: 6 }}
+        />
+      )}
+    </View>
+  );
+};
+
+// Enhanced Team Multi-Select Component (similar to CreateTaskForm)
+const TeamMultiSelectEnhanced = ({ teams, selectedIds, setSelectedIds, teamSearch, setTeamSearch, showMenu }: {
+  teams: any[];
+  selectedIds: string[];
+  setSelectedIds: (ids: string[]) => void;
+  teamSearch: string;
+  setTeamSearch: (s: string) => void;
+  showMenu: boolean;
+}) => {
+  const handleTeamSelection = (teamId: string) => {
+    const newSelectedTeams = selectedIds.includes(teamId)
+      ? selectedIds.filter(id => id !== teamId)
+      : [...selectedIds, teamId];
+    setSelectedIds(newSelectedTeams);
+  };
+
+  return (
+    <>
+      {showMenu && (
+        <View style={formStyles.teamSelectMenu}>
+          <View style={formStyles.searchHeader}>
+            <View style={formStyles.searchBox}>
+              <Ionicons name="search" size={14} color="#9ca3af" />
+              <TextInput
+                value={teamSearch}
+                onChangeText={setTeamSearch}
+                placeholder="Search teams"
+                placeholderTextColor="#9ca3af"
+                style={formStyles.searchInput}
+                autoFocus={false}
+              />
+            </View>
+          </View>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled={true}
+            style={{ maxHeight: 250 }}
+            contentContainerStyle={{ paddingBottom: 8 }}
+            showsVerticalScrollIndicator={true}
+            bounces={false}
+          >
+            {teams
+              .filter(t => !teamSearch.trim() || (t.name || t.title || '').toLowerCase().includes(teamSearch.toLowerCase()))
+              .map((team, idx) => {
+                const teamId = team.id || team.teamId || team.name;
+                return (
+                  <TouchableOpacity
+                    key={teamId || idx}
+                    style={[
+                      formStyles.selectOption,
+                      selectedIds.includes(teamId) && formStyles.selectedOption
+                    ]}
+                    onPress={() => handleTeamSelection(teamId)}
+                  >
+                    <View style={formStyles.optionContent}>
+                      <Text style={[
+                        formStyles.selectOptionText,
+                        selectedIds.includes(teamId) && formStyles.selectedOptionText
+                      ]}>
+                        {team.name || team.title || '-'}
+                      </Text>
+                      {selectedIds.includes(teamId) && (
+                        <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            {teams.length === 0 && (
+              <View style={formStyles.emptyState}>
+                <Text style={formStyles.emptyStateText}>No teams found</Text>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      )}
+    </>
+  );
+};
+
+// Enhanced User Select Component (similar to CreateTaskForm)
+const UserSelectEnhanced = ({ users, selectedId, setSelectedId, userSearch, setUserSearch, showMenu }: {
+  users: any[];
+  selectedId: string;
+  setSelectedId: (id: string) => void;
+  userSearch: string;
+  setUserSearch: (s: string) => void;
+  showMenu: boolean;
+}) => {
+  return (
+    <>
+      {showMenu && (
+        <View style={formStyles.userSelectMenu}>
+          <View style={formStyles.searchHeader}>
+            <View style={formStyles.searchBox}>
+              <Ionicons name="search" size={14} color="#9ca3af" />
+              <TextInput
+                value={userSearch}
+                onChangeText={setUserSearch}
+                placeholder="Search users"
+                placeholderTextColor="#9ca3af"
+                style={formStyles.searchInput}
+                autoFocus={false}
+              />
+            </View>
+          </View>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled={true}
+            style={{ maxHeight: 250 }}
+            contentContainerStyle={{ paddingBottom: 8 }}
+            showsVerticalScrollIndicator={true}
+            bounces={false}
+          >
+            {users
+              .filter(u => {
+                const searchTerm = userSearch.toLowerCase();
+                const name = (u.name || '').toLowerCase();
+                const email = (u.email || '').toLowerCase();
+                const username = (u.username || '').toLowerCase();
+                return !searchTerm || name.includes(searchTerm) || email.includes(searchTerm) || username.includes(searchTerm);
+              })
+              .map((user, idx) => (
+                <TouchableOpacity
+                  key={user.id || idx}
+                  style={[
+                    formStyles.selectOption,
+                    selectedId === user.id && formStyles.selectedOption
+                  ]}
+                  onPress={() => {
+                    setSelectedId(user.id);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={formStyles.optionContent}>
+                    <View style={formStyles.userInfo}>
+                      <Text style={[
+                        formStyles.selectOptionText,
+                        selectedId === user.id && formStyles.selectedOptionText
+                      ]}>
+                        {user.name || user.username || 'Unknown User'}
+                      </Text>
+                      {user.email && (
+                        <Text style={[formStyles.selectOptionText, { fontSize: 12, color: '#6b7280', marginTop: 2 }]}>
+                          {user.email}
+                        </Text>
+                      )}
+                      {user.username && user.username !== user.name && (
+                        <Text style={[formStyles.selectOptionText, { fontSize: 11, color: '#9ca3af', marginTop: 1 }]}>
+                          @{user.username}
+                        </Text>
+                      )}
+                    </View>
+                    {selectedId === user.id && (
+                      <Ionicons name="checkmark-circle" size={18} color="#10b981" />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            {users.length === 0 && (
+              <View style={formStyles.emptyState}>
+                <Text style={formStyles.emptyStateText}>No users found</Text>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      )}
+    </>
+  );
+};
+
+// Enhanced Task Multi-Select Component
+const TaskMultiSelectEnhanced = ({ tasks, selectedIds, setSelectedIds, taskSearch, setTaskSearch, showMenu }: {
+  tasks: any[];
+  selectedIds: string[];
+  setSelectedIds: (ids: string[]) => void;
+  taskSearch: string;
+  setTaskSearch: (s: string) => void;
+  showMenu: boolean;
+}) => {
+  const handleTaskSelection = (taskId: string) => {
+    const newSelectedTasks = selectedIds.includes(taskId)
+      ? selectedIds.filter(id => id !== taskId)
+      : [...selectedIds, taskId];
+    setSelectedIds(newSelectedTasks);
+  };
+
+  return (
+    <>
+      {showMenu && (
+        <View style={formStyles.taskSelectMenu}>
+          <View style={formStyles.searchHeader}>
+            <View style={formStyles.searchBox}>
+              <Ionicons name="search" size={14} color="#9ca3af" />
+              <TextInput
+                value={taskSearch}
+                onChangeText={setTaskSearch}
+                placeholder="Search tasks"
+                placeholderTextColor="#9ca3af"
+                style={formStyles.searchInput}
+                autoFocus={false}
+              />
+            </View>
+          </View>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled={true}
+            style={{ maxHeight: 250 }}
+            contentContainerStyle={{ paddingBottom: 8 }}
+            showsVerticalScrollIndicator={true}
+            bounces={false}
+          >
+            {tasks
+              .filter(t => {
+                const searchTerm = taskSearch.toLowerCase();
+                const title = (t.title || t.name || '').toLowerCase();
+                const description = (t.description || '').toLowerCase();
+                const project = (t.project || '').toLowerCase();
+                return !searchTerm || title.includes(searchTerm) || description.includes(searchTerm) || project.includes(searchTerm);
+              })
+              .map((task, idx) => {
+                const taskId = task.id || task.taskId;
+                return (
+                  <TouchableOpacity
+                    key={taskId || idx}
+                    style={[
+                      formStyles.selectOption,
+                      selectedIds.includes(taskId) && formStyles.selectedOption
+                    ]}
+                    onPress={() => handleTaskSelection(taskId)}
+                  >
+                    <View style={formStyles.optionContent}>
+                      <View style={formStyles.userInfo}>
+                        <Text style={[
+                          formStyles.selectOptionText,
+                          selectedIds.includes(taskId) && formStyles.selectedOptionText
+                        ]} numberOfLines={1}>
+                          {task.title || task.name || 'Untitled Task'}
+                        </Text>
+                        {task.project && (
+                          <Text style={[formStyles.selectOptionText, { fontSize: 12, color: '#6b7280', marginTop: 2 }]} numberOfLines={1}>
+                            Project: {task.project}
+                          </Text>
+                        )}
+                        {task.status && (
+                          <Text style={[formStyles.selectOptionText, { fontSize: 11, color: '#9ca3af', marginTop: 1 }]}>
+                            Status: {task.status}
+                          </Text>
+                        )}
+                      </View>
+                      {selectedIds.includes(taskId) && (
+                        <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            {tasks.length === 0 && (
+              <View style={formStyles.emptyState}>
+                <Text style={formStyles.emptyStateText}>No tasks found</Text>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      )}
+    </>
+  );
+};
+
+// Form Styles (matching CreateTaskForm)
+const formStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  col: {
+    flex: 1,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 8,
+  },
+  select: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectText: {
+    fontSize: 14,
+    color: '#1f2937',
+  },
+  dropdownContainer: {
+    position: 'relative',
+  },
+  selectMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 25,
+    overflow: 'hidden',
+    zIndex: 9999,
+  },
+  selectOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  selectOptionText: {
+    fontSize: 14,
+    color: '#1f2937',
+  },
+  statusDropdownWrapper: {
+    zIndex: 5000,
+    elevation: 25,
+  },
+  priorityDropdownWrapper: {
+    zIndex: 4000,
+    elevation: 20,
+  },
+  teamDropdownWrapper: {
+    zIndex: 6000,
+    elevation: 30,
+  },
+  userDropdownWrapper: {
+    zIndex: 6000,
+    elevation: 30,
+  },
+  taskDropdownWrapper: {
+    zIndex: 3000,
+    elevation: 15,
+  },
+  teamSelectMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 30,
+    overflow: 'hidden',
+    zIndex: 6000,
+  },
+  userSelectMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 30,
+    overflow: 'hidden',
+    zIndex: 6000,
+  },
+  taskSelectMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 15,
+    overflow: 'hidden',
+    zIndex: 3000,
+  },
+  searchHeader: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+    backgroundColor: 'white',
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  searchInput: {
+    marginLeft: 6,
+    flex: 1,
+    color: '#111827',
+    paddingVertical: 0,
+  },
+  optionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  selectedOption: {
+    backgroundColor: '#f0f9ff',
+    borderLeftWidth: 3,
+    borderLeftColor: '#0ea5e9',
+  },
+  selectedOptionText: {
+    color: '#0c4a6e',
+    fontWeight: '600',
+  },
+  userInfo: {
+    flex: 1,
+  },
+  emptyState: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#9ca3af',
+    fontStyle: 'italic',
+  },
+  assignmentGroup: {
+    marginBottom: 0,
+  },
+  selectedItemsContainer: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    paddingVertical: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    maxHeight: 50,
+  },
+  selectedItemsContent: {
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    gap: 8,
+  },
+  selectedItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#dbeafe',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#93c5fd',
+  },
+  selectedItemText: {
+    fontSize: 12,
+    color: '#1e40af',
+    marginRight: 4,
+  },
+});
 
 

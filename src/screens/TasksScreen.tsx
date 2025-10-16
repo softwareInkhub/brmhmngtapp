@@ -12,7 +12,7 @@ import {
   ScrollView,
   Modal,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAppContext } from '../context/AppContext';
@@ -24,6 +24,7 @@ import Sidebar from '../components/Sidebar';
 
 const TasksScreen = () => {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const { state, dispatch } = useAppContext();
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
@@ -340,51 +341,124 @@ const TasksScreen = () => {
       });
     }
 
+    const progress = item.progress || 0;
+    const hasSubtasks = getSubtaskCount(item) > 0;
+    const isOverdue = item.status === 'Overdue' || (item.dueDate && new Date(item.dueDate) < new Date() && item.status !== 'Completed');
+
     return (
       <View style={styles.taskCard}>
         <TouchableOpacity
-          style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+          style={styles.taskCardTouchable}
           onPress={() => {
             setSelectedTaskForDetails(item);
             setShowTaskDetailsModal(true);
           }}
           activeOpacity={0.8}
         >
-          <View style={styles.taskCardLeft}>
-            <View style={styles.taskIcon}> 
-              <Ionicons name="clipboard" size={22} color="#f59e0b" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.taskCardTitle} numberOfLines={1}>{item.title || 'No Title'}</Text>
-              <Text style={styles.taskCardMeta} numberOfLines={1}>
-                {getStatusText(item.status)} • {item.dueDate || 'No Date'}
-              </Text>
-              {item.parentId && (
-                <View style={styles.parentTaskBadge}>
-                  <Text style={styles.parentTaskBadgeText} numberOfLines={1}>
-                    Subtask of: {state.tasks.find(t => t.id === item.parentId)?.title || item.parentId}
-                  </Text>
+          {/* Priority Indicator Bar */}
+          <View style={[styles.priorityBar, { backgroundColor: getPriorityColor(item.priority || 'Medium') }]} />
+          
+          <View style={styles.taskCardContent}>
+            {/* Header Row */}
+            <View style={styles.taskCardHeader}>
+              <View style={styles.taskCardHeaderLeft}>
+                <View style={[styles.taskIconNew, { backgroundColor: getStatusColor(item.status).bg }]}> 
+                  <Ionicons name="clipboard" size={18} color={getStatusColor(item.status).text} />
                 </View>
-              )}
-              {getSubtaskCount(item) > 0 && (
-                <TouchableOpacity style={styles.subtaskBadge} onPress={() => openSubtasksModal(item)}>
-                  <Text style={styles.subtaskBadgeText}>{getSubtaskCount(item)} Subtask{getSubtaskCount(item) > 1 ? 's' : ''}</Text>
-                </TouchableOpacity>
-              )}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.taskCardTitleNew} numberOfLines={2}>{item.title || 'No Title'}</Text>
+                  
+                  {/* Date, Status, and Time - All in one line under title */}
+                  <View style={styles.dateStatusTimeRow}>
+                    {/* Date Badge */}
+                    {item.dueDate && (
+                      <View style={[styles.dueDateBadge, isOverdue && styles.dueDateBadgeOverdue]}>
+                        <Ionicons name="calendar-outline" size={10} color={isOverdue ? '#ef4444' : '#6b7280'} />
+                        <Text style={[styles.dueDateBadgeText, isOverdue && styles.dueDateBadgeTextOverdue]}>
+                          {new Date(item.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </Text>
+                      </View>
+                    )}
+                    
+                    {/* Status Badge */}
+                    <View style={[styles.statusBadgeNew, { backgroundColor: getStatusColor(item.status).bg }]}>
+                      <View style={[styles.statusDotNew, { backgroundColor: getStatusColor(item.status).text }]} />
+                      <Text style={[styles.statusBadgeText, { color: getStatusColor(item.status).text }]}>
+                        {getStatusText(item.status)}
+                      </Text>
+                    </View>
+
+                    {/* Time Badge */}
+                    {item.estimatedHours > 0 && (
+                      <View style={styles.timeContainer}>
+                        <Ionicons name="time-outline" size={12} color="#92400e" />
+                        <Text style={styles.timeText}>{item.estimatedHours}h</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.menuButton}
+                onPress={() => handleMenuPress(item.id, item.title || 'Untitled Task')}
+              >
+                <Ionicons name="ellipsis-horizontal" size={18} color="#6b7280" />
+              </TouchableOpacity>
             </View>
+
+            {/* Progress Section */}
+            {progress > 0 && (
+              <View style={styles.progressSection}>
+                <View style={styles.progressBarContainer}>
+                  <View style={styles.progressBarTrack}>
+                    <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
+                  </View>
+                  <Text style={styles.progressText}>{progress}%</Text>
+                </View>
+              </View>
+            )}
+
+            {/* Project → Subtask/Parent Info Row (Bottom) */}
+            {(item.project || item.parentId || hasSubtasks) && (
+              <View style={styles.metaInfoRow}>
+                {/* Project Badge (Left) */}
+                {item.project && (
+                  <View style={styles.projectBadge}>
+                    <Ionicons name="briefcase-outline" size={10} color="#6366f1" />
+                    <Text style={styles.projectBadgeText} numberOfLines={1}>{item.project}</Text>
+                  </View>
+                )}
+                
+                {/* Parent Task Badge - if this is a subtask */}
+                {item.parentId && (
+                  <View style={styles.parentTaskBadge}>
+                    <Ionicons name="git-branch-outline" size={11} color="#0277bd" />
+                    <Text style={styles.parentTaskBadgeText} numberOfLines={1}>
+                      Subtask of: {state.tasks.find(t => t.id === item.parentId)?.title || item.parentId}
+                    </Text>
+                  </View>
+                )}
+                
+                {/* Subtasks Badge - if this task has subtasks */}
+                {hasSubtasks && (
+                  <TouchableOpacity style={styles.subtaskBadge} onPress={() => openSubtasksModal(item)}>
+                    <Ionicons name="list" size={11} color="#d97706" />
+                    <Text style={styles.subtaskBadgeText}>{getSubtaskCount(item)} Subtask{getSubtaskCount(item) > 1 ? 's' : ''}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
           </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={() => handleMenuPress(item.id, item.title || 'Untitled Task')}
-        >
-          <Ionicons name="ellipsis-horizontal" size={18} color="#6b7280" />
         </TouchableOpacity>
       </View>
     );
   };
 
   const renderGridTaskItem = ({ item }: { item: any }) => {
+    const progress = item.progress || 0;
+    const hasSubtasks = getSubtaskCount(item) > 0;
+    const isOverdue = item.status === 'Overdue' || (item.dueDate && new Date(item.dueDate) < new Date() && item.status !== 'Completed');
+
     return (
       <View style={styles.gridTaskCard}>
         <TouchableOpacity
@@ -393,41 +467,107 @@ const TasksScreen = () => {
             setSelectedTaskForDetails(item);
             setShowTaskDetailsModal(true);
           }}
+          activeOpacity={0.8}
         >
+          {/* Priority Bar */}
+          <View style={[styles.gridPriorityBar, { backgroundColor: getPriorityColor(item.priority || 'Medium') }]} />
+          
+          {/* Header with Status Icon */}
+          <View style={styles.gridTaskHeader}>
+            <View style={[styles.gridTaskIconContainer, { backgroundColor: getStatusColor(item.status).bg }]}>
+              <Ionicons name="clipboard" size={16} color={getStatusColor(item.status).text} />
+            </View>
+            <View style={[styles.gridPriorityIndicator, { backgroundColor: getPriorityColor(item.priority || 'Medium') }]} />
+          </View>
+
           {/* Task Title */}
           <View style={styles.gridTaskContent}>
             <Text style={styles.gridTaskTitle} numberOfLines={2}>
               {item.title || 'No Title'}
             </Text>
-          </View>
-
-          {/* Task Footer */}
-          <View style={styles.gridTaskFooter}>
-            <View style={styles.gridStatusContainer}>
-              <View
-                style={[
-                  styles.gridStatusBadge,
-                  { backgroundColor: getStatusColor(item.status).bg },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.gridStatusText,
-                    { color: getStatusColor(item.status).text },
-                  ]}
-                >
-                  {getStatusText(item.status)}
+            {item.project && (
+              <View style={styles.gridProjectBadge}>
+                <Ionicons name="briefcase-outline" size={9} color="#6366f1" />
+                <Text style={styles.gridProjectText} numberOfLines={1}>{item.project}</Text>
+              </View>
+            )}
+            {/* Parent Task Badge */}
+            {item.parentId && (
+              <View style={styles.gridParentBadge}>
+                <Ionicons name="git-branch-outline" size={9} color="#0277bd" />
+                <Text style={styles.gridParentText} numberOfLines={1}>
+                  Subtask
                 </Text>
               </View>
+            )}
+            {/* Subtasks Badge */}
+            {hasSubtasks && (
+              <View style={styles.gridSubtaskBadgeProminent}>
+                <Ionicons name="list" size={9} color="#d97706" />
+                <Text style={styles.gridSubtaskTextProminent}>
+                  {getSubtaskCount(item)} subtask{getSubtaskCount(item) > 1 ? 's' : ''}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Progress Bar */}
+          {progress > 0 && (
+            <View style={styles.gridProgressSection}>
+              <View style={styles.gridProgressBar}>
+                <View style={[styles.gridProgressFill, { width: `${progress}%` }]} />
+              </View>
+              <Text style={styles.gridProgressTextNew}>{progress}%</Text>
+            </View>
+          )}
+
+          {/* Status and Due Date Row */}
+          <View style={styles.gridTaskFooter}>
+            <View style={[styles.gridStatusBadge, { backgroundColor: getStatusColor(item.status).bg }]}>
+              <Text style={[styles.gridStatusText, { color: getStatusColor(item.status).text }]}>
+                {getStatusText(item.status)}
+              </Text>
             </View>
             
-            <View style={styles.gridDueDateContainer}>
-              <Text style={styles.gridDueDate}>
-                {new Date(item.dueDate).toLocaleDateString('en-US', { 
-                  month: 'short', 
-                  day: 'numeric' 
-                })}
-              </Text>
+            {item.dueDate && (
+              <View style={[styles.gridDueDateBadge, isOverdue && styles.gridDueDateBadgeOverdue]}>
+                <Ionicons name="calendar-outline" size={9} color={isOverdue ? '#ef4444' : '#6b7280'} />
+                <Text style={[styles.gridDueDateText, isOverdue && styles.gridDueDateOverdue]}>
+                  {new Date(item.dueDate).toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric' 
+                  })}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Assignee and Info Row */}
+          <View style={styles.gridInfoRow}>
+            {item.assignee && (
+              <View style={styles.gridAssigneeInfo}>
+                <View style={styles.gridAssigneeAvatar}>
+                  <Text style={styles.gridAssigneeInitial}>
+                    {item.assignee.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <Text style={styles.gridAssigneeName} numberOfLines={1}>{item.assignee}</Text>
+              </View>
+            )}
+            
+            <View style={styles.gridBadgesRow}>
+              {hasSubtasks && (
+                <View style={styles.gridSubtaskBadge}>
+                  <Ionicons name="list" size={10} color="#8b5cf6" />
+                  <Text style={styles.gridSubtaskText}>{getSubtaskCount(item)}</Text>
+                </View>
+              )}
+              {item.estimatedHours > 0 && (
+                <View style={styles.gridTimeBadge}>
+                  <Ionicons name="time-outline" size={10} color="#f59e0b" />
+                  <Text style={styles.gridTimeText}>{item.estimatedHours}h</Text>
+                </View>
+              )}
             </View>
           </View>
         </TouchableOpacity>
@@ -458,7 +598,7 @@ const TasksScreen = () => {
       {/* Profile Header */}
       <ProfileHeader
         title="My Tasks"
-        subtitle="Task management"
+        // subtitle="Task management"
         rightElement={(() => {
           if (!hasPermission('projectmanagement','crud')) return null;
           return (
@@ -741,7 +881,7 @@ const TasksScreen = () => {
               activeOpacity={1}
               onPress={() => setShowTaskDetailsModal(false)}
             />
-            <View style={styles.taskDetailsModal}>
+            <View style={[styles.taskDetailsModal, { paddingBottom: insets.bottom > 0 ? insets.bottom : 16 }]}>
             <View style={styles.taskDetailsHeader}>
               <Text style={styles.taskDetailsTitle}>Task Details</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -1010,7 +1150,7 @@ const TasksScreen = () => {
               activeOpacity={1}
               onPress={() => setShowCreateTaskModal(false)}
             />
-            <View style={[styles.taskDetailsModal, { maxHeight: '90%', minHeight: '80%' }]}>
+            <View style={[styles.taskDetailsModal, { maxHeight: '90%', minHeight: '80%', paddingBottom: insets.bottom > 0 ? insets.bottom : 16 }]}>
               <View style={styles.taskDetailsHeader}>
                 <Text style={styles.taskDetailsTitle}>Create Task</Text>
                 <TouchableOpacity onPress={() => setShowCreateTaskModal(false)}>
@@ -1041,7 +1181,7 @@ const TasksScreen = () => {
               activeOpacity={1}
               onPress={() => setShowEditTaskModal(false)}
             />
-            <View style={[styles.taskDetailsModal, { maxHeight: '90%', minHeight: '80%' }]}>
+            <View style={[styles.taskDetailsModal, { maxHeight: '90%', minHeight: '80%', paddingBottom: insets.bottom > 0 ? insets.bottom : 16 }]}>
               <View style={styles.taskDetailsHeader}>
                 <Text style={styles.taskDetailsTitle}>Edit Task</Text>
                 <TouchableOpacity onPress={() => setShowEditTaskModal(false)}>
@@ -1066,7 +1206,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f1f5f9',
-    paddingBottom: 80, // Add space for bottom tab bar
+    paddingBottom: 80, // Add space for bottom tab bar (now positioned within safe area)
   },
   header: {
     backgroundColor: '#f1f5f9  ',
@@ -1107,24 +1247,305 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
   },
   taskCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginVertical: 6,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    marginHorizontal: 8,
+    marginVertical: 8,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 3,
     },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    overflow: 'hidden',
+  },
+  taskCardTouchable: {
+    position: 'relative',
+  },
+  priorityBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+  },
+  taskCardContent: {
+    padding: 16,
+    paddingLeft: 20,
+  },
+  taskCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  taskCardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    flex: 1,
+  },
+  taskIconNew: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -12,
+    marginLeft: -12,
+  },
+  taskCardTitleNew: { 
+    fontSize: 15, 
+    fontWeight: '700', 
+    color: '#111827',
+    lineHeight: 20,
+    marginBottom: 2,
+  },
+  dateStatusTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  metaInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 0,
+    marginBottom: 0,
+    marginLeft: -12,
+  },
+  projectBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#eef2ff',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  projectBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6366f1',
+  },
+  timeContainerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 6,
+    shadowColor: '#f59e0b',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  timeTextHeader: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#92400e',
+  },
+  taskCardDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+    flexWrap: 'wrap',
+  },
+  statusBadgeNew: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  statusDotNew: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  priorityBadgeNew: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    backgroundColor: '#ffffff',
+  },
+  priorityBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  dueDateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+  },
+  dueDateBadgeOverdue: {
+    backgroundColor: '#fee2e2',
+  },
+  dueDateBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  dueDateBadgeTextOverdue: {
+    color: '#ef4444',
+  },
+  progressSection: {
+    marginBottom: 4,
+    marginTop: 0,
+  },
+  progressBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  progressBarTrack: {
+    flex: 1,
+    height: 6,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#10b981',
+    borderRadius: 3,
+  },
+  progressText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#10b981',
+    minWidth: 32,
+    textAlign: 'right',
+  },
+  taskCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 12,
+    marginTop: 0,
+  },
+  taskCardFooterLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  assigneeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#f8fafc',
+    paddingRight: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  assigneeAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#137fec',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  assigneeInitial: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  assigneeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+    maxWidth: 100,
+  },
+  timeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  timeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#92400e',
+  },
+  subtaskBadgeNew: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#f3e8ff',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e9d5ff',
+  },
+  subtaskBadgeTextNew: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#8b5cf6',
+  },
+  parentBadgeNew: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#dbeafe',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tagsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    flexWrap: 'wrap',
+  },
+  tagChip: {
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+  },
+  tagChipText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  moreTagsText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#9ca3af',
   },
   taskCardLeft: {
     flexDirection: 'row',
@@ -1144,27 +1565,55 @@ const styles = StyleSheet.create({
   taskCardMeta: { fontSize: 12, color: '#6b7280' },
   taskCardSubtext: { fontSize: 11, color: '#9ca3af' },
   subtaskBadge: {
-    alignSelf: 'flex-start',
-    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: '#fef3c7',
-    borderRadius: 12,
+    borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderWidth: 1,
+    paddingVertical: 4,
+    borderWidth: 1.5,
     borderColor: '#f59e0b',
+    shadowColor: '#f59e0b',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  subtaskBadgeText: { fontSize: 11, fontWeight: '600', color: '#d97706' },
+  subtaskBadgeText: { 
+    fontSize: 11, 
+    fontWeight: '700', 
+    color: '#d97706',
+    letterSpacing: 0.2,
+  },
   parentTaskBadge: {
-    alignSelf: 'flex-start',
-    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: '#e0f2fe',
-    borderRadius: 12,
+    borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: '#b3e5fc',
+    paddingVertical: 4,
+    borderWidth: 1.5,
+    borderColor: '#0ea5e9',
+    shadowColor: '#0ea5e9',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  parentTaskBadgeText: { fontSize: 11, fontWeight: '500', color: '#0277bd' },
+  parentTaskBadgeText: { 
+    fontSize: 11, 
+    fontWeight: '700', 
+    color: '#0277bd',
+    letterSpacing: 0.2,
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',
@@ -1462,7 +1911,10 @@ const styles = StyleSheet.create({
   },
   menuButton: {
     padding: 8,
-    borderRadius: 4,
+    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+    marginTop: -16,
+    marginRight: -16,
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -1490,8 +1942,8 @@ const styles = StyleSheet.create({
   },
   gridTaskCard: {
     flex: 1,
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
     marginHorizontal: 4,
     shadowColor: '#000',
     shadowOffset: {
@@ -1502,25 +1954,246 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 6,
     position: 'relative',
-    minHeight: 90,
+    minHeight: 160,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#f1f5f9',
+    overflow: 'hidden',
   },
   gridTaskContentContainer: {
-    padding: 12,
+    padding: 14,
     flex: 1,
-    borderRadius: 12,
+    position: 'relative',
+  },
+  gridPriorityBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
   },
   gridTaskHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 10,
+    marginTop: 2,
+  },
+  gridTaskIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gridPriorityIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  gridTaskContent: {
+    flex: 1,
+    marginBottom: 10,
+  },
+  gridTaskTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    lineHeight: 18,
     marginBottom: 6,
   },
-  gridTaskHeaderLeft: {
+  gridProjectBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#eef2ff',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+    alignSelf: 'flex-start',
+  },
+  gridProjectText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#6366f1',
+  },
+  gridParentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    backgroundColor: '#e0f2fe',
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: '#0ea5e9',
+  },
+  gridParentText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#0277bd',
+  },
+  gridSubtaskBadgeProminent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    backgroundColor: '#fef3c7',
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+  },
+  gridSubtaskTextProminent: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#d97706',
+  },
+  gridProgressSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  gridProgressBar: {
     flex: 1,
+    height: 5,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  gridProgressFill: {
+    height: '100%',
+    backgroundColor: '#10b981',
+    borderRadius: 3,
+  },
+  gridProgressTextNew: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#10b981',
+    minWidth: 28,
+    textAlign: 'right',
+  },
+  gridTaskFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  gridStatusBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  gridStatusText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  gridDueDateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#f9fafb',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  gridDueDateBadgeOverdue: {
+    backgroundColor: '#fee2e2',
+  },
+  gridDueDateText: {
+    fontSize: 9,
+    color: '#6b7280',
+    fontWeight: '600',
+  },
+  gridDueDateOverdue: {
+    color: '#ef4444',
+  },
+  gridInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  gridAssigneeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flex: 1,
+  },
+  gridAssigneeAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#137fec',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gridAssigneeInitial: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  gridAssigneeName: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#374151',
+    maxWidth: 80,
+  },
+  gridBadgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  gridSubtaskBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#f3e8ff',
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  gridSubtaskText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#8b5cf6',
+  },
+  gridTimeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  gridTimeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#f59e0b',
+  },
+  gridStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  gridTaskDescription: {
+    fontSize: 13,
+    color: '#6b7280',
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  gridProgressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  gridProgressText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#6b7280',
   },
   gridMenuButton: {
     padding: 2,
@@ -1534,88 +2207,6 @@ const styles = StyleSheet.create({
     opacity: 0.1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  gridStatusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  gridStatusText: {
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  gridTaskContent: {
-    flex: 1,
-    marginBottom: 8,
-  },
-  gridTaskTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1f2937',
-    lineHeight: 16,
-  },
-  gridTaskDescription: {
-    fontSize: 13,
-    color: '#6b7280',
-    lineHeight: 18,
-    marginBottom: 8,
-  },
-  gridProgressContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  gridProgressBar: {
-    flex: 1,
-    height: 4,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 2,
-    marginRight: 8,
-  },
-  gridProgressFill: {
-    height: '100%',
-    backgroundColor: '#137fec',
-    borderRadius: 2,
-  },
-  gridProgressText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#6b7280',
-  },
-  gridTaskFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  gridStatusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  gridAssigneeInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  gridAssigneeAvatar: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#137fec',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  gridAssigneeInitial: {
-    fontSize: 9,
-    fontWeight: 'bold',
-    color: 'white',
   },
   gridDueDateContainer: {
     flexDirection: 'row',

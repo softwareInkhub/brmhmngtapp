@@ -144,8 +144,8 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
       return;
     }
 
-    if (!formData.assignee.trim() && selectedTeams.length === 0 && selectedUsers.length === 0) {
-      Alert.alert('Error', 'Please enter an assignee or select teams/users');
+    if (selectedTeams.length === 0 && selectedUsers.length === 0) {
+      Alert.alert('Error', 'Please select teams or users');
       return;
     }
 
@@ -215,11 +215,6 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
           // Prepare assignment details for notification
           const assignmentDetails = [];
           
-          // Add manual assignee if provided
-          if (formData.assignee.trim()) {
-            assignmentDetails.push(`Manual Assignee: ${formData.assignee.trim()}`);
-          }
-          
           // Add selected teams
           if (selectedTeams.length > 0) {
             const teamNames = selectedTeams.map(teamId => {
@@ -244,7 +239,6 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
             assignmentDetails: assignmentDetails.length > 0 ? assignmentDetails.join(' | ') : 'Unassigned',
             assignedTeams: selectedTeams,
             assignedUsers: selectedUsers,
-            manualAssignee: formData.assignee.trim(),
           };
           
           const notificationResponse = await apiService.sendWhatsAppNotification(enhancedTaskData as any);
@@ -264,11 +258,6 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
 
         // Prepare assignment details for the success message
         const assignmentDetails = [];
-        
-        // Add manual assignee if provided
-        if (formData.assignee.trim()) {
-          assignmentDetails.push(`Manual Assignee: ${formData.assignee.trim()}`);
-        }
         
         // Add selected teams
         if (selectedTeams.length > 0) {
@@ -362,6 +351,23 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
 
   return (
     <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      {/* Dropdown Overlay - Close dropdowns when clicking outside */}
+      {(showPriorityMenu || showStatusMenu || showHourMenu || showMinuteMenu || showProjectMenu || showTeamMenu || showUserMenu) && (
+        <TouchableOpacity
+          style={styles.dropdownOverlay}
+          activeOpacity={1}
+          onPress={() => {
+            setShowPriorityMenu(false);
+            setShowStatusMenu(false);
+            setShowHourMenu(false);
+            setShowMinuteMenu(false);
+            setShowProjectMenu(false);
+            setShowTeamMenu(false);
+            setShowUserMenu(false);
+          }}
+        />
+      )}
+      
       {/* Task Title */}
       <View style={styles.inputGroup}>
         <Text style={styles.label}>Task Title *</Text>
@@ -384,6 +390,219 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
           multiline
           numberOfLines={4}
         />
+      </View>
+
+      {/* Assignment Section */}
+      <View style={styles.inputGroup}>
+        <Text style={styles.label}>Assignment *</Text>
+        
+        {/* Selected Teams and Users Display - Single Horizontal Line */}
+        {(selectedTeams.length > 0 || selectedUsers.length > 0) && (
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.selectedItemsContainer}
+            contentContainerStyle={styles.selectedItemsContent}
+          >
+            {/* Selected Teams */}
+            {selectedTeams.map(teamId => {
+              const team = teams.find(t => t.id === teamId);
+              return (
+                <View key={teamId} style={styles.selectedItem}>
+                  <Text style={styles.selectedItemText}>{team?.name || teamId}</Text>
+                  <TouchableOpacity onPress={() => removeTeam(teamId)}>
+                    <Ionicons name="close-circle" size={16} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+
+            {/* Selected Users */}
+            {selectedUsers.map(userId => {
+              const user = users.find(u => u.id === userId);
+              return (
+                <View key={userId} style={styles.selectedItem}>
+                  <Text style={styles.selectedItemText}>{user?.name || userId}</Text>
+                  <TouchableOpacity onPress={() => removeUser(userId)}>
+                    <Ionicons name="close-circle" size={16} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        {/* Team and User Selection Buttons */}
+        <View style={styles.row}>
+          <View style={[styles.col, styles.teamDropdownWrapper]}>
+            <TouchableOpacity
+              style={styles.select}
+              onPress={() => {
+                setShowTeamMenu(!showTeamMenu);
+                setShowUserMenu(false);
+                // Close other dropdowns
+                setShowPriorityMenu(false);
+                setShowHourMenu(false);
+                setShowMinuteMenu(false);
+                setShowProjectMenu(false);
+                setShowStatusMenu(false);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.selectText}>Select Teams</Text>
+              <Ionicons name={showTeamMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
+            </TouchableOpacity>
+            {showTeamMenu && (
+              <View style={[styles.teamSelectMenu]}>
+                <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: 'white' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+                    <Ionicons name="search" size={14} color="#9ca3af" />
+                    <TextInput
+                      value={teamSearch}
+                      onChangeText={setTeamSearch}
+                      placeholder="Search teams"
+                      placeholderTextColor="#9ca3af"
+                      style={{ marginLeft: 6, flex: 1, color: '#111827', paddingVertical: 0 }}
+                      autoFocus={false}
+                    />
+                  </View>
+                </View>
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled={true}
+                  style={{ maxHeight: 250 }}
+                  contentContainerStyle={{ paddingBottom: 8 }}
+                  showsVerticalScrollIndicator={true}
+                  bounces={false}
+                >
+                  {(teams || [])
+                    .filter(t => !teamSearch.trim() || (t.name || t.title || '').toLowerCase().includes(teamSearch.toLowerCase()))
+                    .map((team, idx) => (
+                      <TouchableOpacity
+                        key={team.id || team.teamId || team.name || String(idx)}
+                        style={[
+                          styles.selectOption,
+                          selectedTeams.includes(team.id || team.teamId || team.name) && styles.selectedOption
+                        ]}
+                        onPress={() => handleTeamSelection(team.id || team.teamId || team.name, team.name || team.title || '')}
+                      >
+                        <View style={styles.optionContent}>
+                          <Text style={[
+                            styles.selectOptionText,
+                            selectedTeams.includes(team.id || team.teamId || team.name) && styles.selectedOptionText
+                          ]}>
+                            {team.name || team.title || '-'}
+                          </Text>
+                          {selectedTeams.includes(team.id || team.teamId || team.name) && (
+                            <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  {teams.length === 0 && (
+                    <View style={styles.emptyState}>
+                      <Text style={styles.emptyStateText}>No teams found</Text>
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            )}
+          </View>
+
+          <View style={[styles.col, styles.userDropdownWrapper]}>
+            <TouchableOpacity
+              style={styles.select}
+              onPress={() => {
+                setShowUserMenu(!showUserMenu);
+                setShowTeamMenu(false);
+                // Close other dropdowns
+                setShowPriorityMenu(false);
+                setShowHourMenu(false);
+                setShowMinuteMenu(false);
+                setShowProjectMenu(false);
+                setShowStatusMenu(false);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.selectText}>Select Users</Text>
+              <Ionicons name={showUserMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
+            </TouchableOpacity>
+            {showUserMenu && (
+              <View style={[styles.userSelectMenu]}>
+                <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: 'white' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+                    <Ionicons name="search" size={14} color="#9ca3af" />
+                    <TextInput
+                      value={userSearch}
+                      onChangeText={setUserSearch}
+                      placeholder="Search users"
+                      placeholderTextColor="#9ca3af"
+                      style={{ marginLeft: 6, flex: 1, color: '#111827', paddingVertical: 0 }}
+                      autoFocus={false}
+                    />
+                  </View>
+                </View>
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled={true}
+                  style={{ maxHeight: 250 }}
+                  contentContainerStyle={{ paddingBottom: 8 }}
+                  showsVerticalScrollIndicator={true}
+                  bounces={false}
+                >
+                  {(users || [])
+                    .filter(u => {
+                      const searchTerm = userSearch.toLowerCase();
+                      const name = (u.name || '').toLowerCase();
+                      const email = (u.email || '').toLowerCase();
+                      const username = (u.username || '').toLowerCase();
+                      return !searchTerm || name.includes(searchTerm) || email.includes(searchTerm) || username.includes(searchTerm);
+                    })
+                    .map((user, idx) => (
+                      <TouchableOpacity
+                        key={user.id || String(idx)}
+                        style={[
+                          styles.selectOption,
+                          selectedUsers.includes(user.id) && styles.selectedOption
+                        ]}
+                        onPress={() => handleUserSelection(user.id, user.name || user.email || '')}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.optionContent}>
+                          <View style={styles.userInfo}>
+                            <Text style={[
+                              styles.selectOptionText,
+                              selectedUsers.includes(user.id) && styles.selectedOptionText
+                            ]}>
+                              {user.name || user.username || 'Unknown User'}
+                            </Text>
+                            {user.email && (
+                              <Text style={[styles.selectOptionText, { fontSize: 12, color: '#6b7280', marginTop: 2 }]}>
+                                {user.email}
+                              </Text>
+                            )}
+                            {user.username && user.username !== user.name && (
+                              <Text style={[styles.selectOptionText, { fontSize: 11, color: '#9ca3af', marginTop: 1 }]}>
+                                @{user.username}
+                              </Text>
+                            )}
+                          </View>
+                          {selectedUsers.includes(user.id) && (
+                            <Ionicons name="checkmark-circle" size={18} color="#10b981" />
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  {users.length === 0 && (
+                    <View style={styles.emptyState}>
+                      <Text style={styles.emptyStateText}>No users found</Text>
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            )}
+          </View>
+        </View>
       </View>
 
       {/* Priority + Estimated Hours (Row) */}
@@ -613,6 +832,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
                     placeholder="Search projects"
                     placeholderTextColor="#9ca3af"
                     style={{ marginLeft: 6, flex: 1, color: '#111827', paddingVertical: 0 }}
+                    autoFocus={false}
                   />
                 </View>
               </View>
@@ -643,292 +863,59 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
         </View>
       </View>
 
-      {/* Assignment Section */}
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Assignment *</Text>
-        
-        {/* Manual Assignee Input */}
-        <View style={styles.inputGroup}>
-          <Text style={[styles.label, { fontSize: 12, color: '#6b7280' }]}>Manual Assignee (Optional)</Text>
+      {/* Status + Tags (Row) */}
+      <View style={[styles.inputGroup, styles.row]}>
+        <View style={[styles.col, styles.statusDropdownWrapper]}>
+          <Text style={styles.label}>Status *</Text>
+          <View style={styles.statusDropdownContainer}>
+            <TouchableOpacity
+              style={styles.select}
+              onPress={() => {
+                setShowStatusMenu(!showStatusMenu);
+                // Close other dropdowns when opening status
+                setShowPriorityMenu(false);
+                setShowHourMenu(false);
+                setShowMinuteMenu(false);
+                setShowProjectMenu(false);
+                setShowTeamMenu(false);
+                setShowUserMenu(false);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.selectText}>{formData.status}</Text>
+              <Ionicons
+                name={showStatusMenu ? 'chevron-up' : 'chevron-down'}
+                size={16}
+                color="#6b7280"
+              />
+            </TouchableOpacity>
+            {showStatusMenu && (
+              <View style={[styles.statusSelectMenu]}>
+                {(['To Do', 'In Progress', 'Completed', 'Overdue'] as const).map(s => (
+                  <TouchableOpacity
+                    key={s}
+                    style={styles.selectOption}
+                    onPress={() => {
+                      handleInputChange('status', s);
+                      setShowStatusMenu(false);
+                    }}
+                  >
+                    <Text style={styles.selectOptionText}>{s}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        </View>
+        <View style={[styles.col, styles.tagsCol]}>
+          <Text style={styles.label}>Tags</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter assignee name manually"
-            value={formData.assignee}
-            onChangeText={(value) => handleInputChange('assignee', value)}
+            placeholder="Comma,separated"
+            value={formData.tags}
+            onChangeText={(value) => handleInputChange('tags', value)}
           />
         </View>
-
-        {/* Selected Teams and Users Display */}
-        {(selectedTeams.length > 0 || selectedUsers.length > 0) && (
-          <View style={styles.selectedItemsContainer}>
-            <Text style={[styles.label, { fontSize: 12, color: '#6b7280', marginBottom: 8 }]}>Selected Assignments:</Text>
-            
-            {/* Selected Teams */}
-            {selectedTeams.length > 0 && (
-              <View style={styles.selectedItemsRow}>
-                <Text style={styles.selectedItemsLabel}>Teams:</Text>
-                <View style={styles.selectedItemsList}>
-                  {selectedTeams.map(teamId => {
-                    const team = teams.find(t => t.id === teamId);
-                    return (
-                      <View key={teamId} style={styles.selectedItem}>
-                        <Text style={styles.selectedItemText}>{team?.name || teamId}</Text>
-                        <TouchableOpacity onPress={() => removeTeam(teamId)}>
-                          <Ionicons name="close-circle" size={16} color="#ef4444" />
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-
-            {/* Selected Users */}
-            {selectedUsers.length > 0 && (
-              <View style={styles.selectedItemsRow}>
-                <Text style={styles.selectedItemsLabel}>Users:</Text>
-                <View style={styles.selectedItemsList}>
-                  {selectedUsers.map(userId => {
-                    const user = users.find(u => u.id === userId);
-                    return (
-                      <View key={userId} style={styles.selectedItem}>
-                        <Text style={styles.selectedItemText}>{user?.name || userId}</Text>
-                        <TouchableOpacity onPress={() => removeUser(userId)}>
-                          <Ionicons name="close-circle" size={16} color="#ef4444" />
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Team and User Selection Buttons */}
-        <View style={styles.row}>
-          <View style={[styles.col, styles.teamDropdownWrapper]}>
-            <TouchableOpacity
-              style={styles.select}
-              onPress={() => {
-                setShowTeamMenu(!showTeamMenu);
-                setShowUserMenu(false);
-                // Close other dropdowns
-                setShowPriorityMenu(false);
-                setShowHourMenu(false);
-                setShowMinuteMenu(false);
-                setShowProjectMenu(false);
-                setShowStatusMenu(false);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.selectText}>Select Teams</Text>
-              <Ionicons name={showTeamMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
-            </TouchableOpacity>
-            {showTeamMenu && (
-              <View style={[styles.teamSelectMenu]}>
-                <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: 'white' }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
-                    <Ionicons name="search" size={14} color="#9ca3af" />
-                    <TextInput
-                      value={teamSearch}
-                      onChangeText={setTeamSearch}
-                      placeholder="Search teams"
-                      placeholderTextColor="#9ca3af"
-                      style={{ marginLeft: 6, flex: 1, color: '#111827', paddingVertical: 0 }}
-                    />
-                  </View>
-                </View>
-                <ScrollView
-                  keyboardShouldPersistTaps="handled"
-                  nestedScrollEnabled={true}
-                  style={{ maxHeight: 250 }}
-                  contentContainerStyle={{ paddingBottom: 8 }}
-                  showsVerticalScrollIndicator={true}
-                  bounces={false}
-                >
-                  {(teams || [])
-                    .filter(t => !teamSearch.trim() || (t.name || t.title || '').toLowerCase().includes(teamSearch.toLowerCase()))
-                    .map((team, idx) => (
-                      <TouchableOpacity
-                        key={team.id || team.teamId || team.name || String(idx)}
-                        style={[
-                          styles.selectOption,
-                          selectedTeams.includes(team.id || team.teamId || team.name) && styles.selectedOption
-                        ]}
-                        onPress={() => handleTeamSelection(team.id || team.teamId || team.name, team.name || team.title || '')}
-                      >
-                        <View style={styles.optionContent}>
-                          <Text style={[
-                            styles.selectOptionText,
-                            selectedTeams.includes(team.id || team.teamId || team.name) && styles.selectedOptionText
-                          ]}>
-                            {team.name || team.title || '-'}
-                          </Text>
-                          {selectedTeams.includes(team.id || team.teamId || team.name) && (
-                            <Ionicons name="checkmark-circle" size={16} color="#10b981" />
-                          )}
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  {teams.length === 0 && (
-                    <View style={styles.emptyState}>
-                      <Text style={styles.emptyStateText}>No teams found</Text>
-                    </View>
-                  )}
-                </ScrollView>
-              </View>
-            )}
-          </View>
-
-          <View style={[styles.col, styles.userDropdownWrapper]}>
-            <TouchableOpacity
-              style={styles.select}
-              onPress={() => {
-                setShowUserMenu(!showUserMenu);
-                setShowTeamMenu(false);
-                // Close other dropdowns
-                setShowPriorityMenu(false);
-                setShowHourMenu(false);
-                setShowMinuteMenu(false);
-                setShowProjectMenu(false);
-                setShowStatusMenu(false);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.selectText}>Select Users</Text>
-              <Ionicons name={showUserMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
-            </TouchableOpacity>
-            {showUserMenu && (
-              <View style={[styles.userSelectMenu]}>
-                <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: 'white' }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
-                    <Ionicons name="search" size={14} color="#9ca3af" />
-                    <TextInput
-                      value={userSearch}
-                      onChangeText={setUserSearch}
-                      placeholder="Search users"
-                      placeholderTextColor="#9ca3af"
-                      style={{ marginLeft: 6, flex: 1, color: '#111827', paddingVertical: 0 }}
-                    />
-                  </View>
-                </View>
-                <ScrollView
-                  keyboardShouldPersistTaps="handled"
-                  nestedScrollEnabled={true}
-                  style={{ maxHeight: 250 }}
-                  contentContainerStyle={{ paddingBottom: 8 }}
-                  showsVerticalScrollIndicator={true}
-                  bounces={false}
-                >
-                  {(users || [])
-                    .filter(u => {
-                      const searchTerm = userSearch.toLowerCase();
-                      const name = (u.name || '').toLowerCase();
-                      const email = (u.email || '').toLowerCase();
-                      const username = (u.username || '').toLowerCase();
-                      return !searchTerm || name.includes(searchTerm) || email.includes(searchTerm) || username.includes(searchTerm);
-                    })
-                    .map((user, idx) => (
-                      <TouchableOpacity
-                        key={user.id || String(idx)}
-                        style={[
-                          styles.selectOption,
-                          selectedUsers.includes(user.id) && styles.selectedOption
-                        ]}
-                        onPress={() => handleUserSelection(user.id, user.name || user.email || '')}
-                        activeOpacity={0.7}
-                      >
-                        <View style={styles.optionContent}>
-                          <View style={styles.userInfo}>
-                            <Text style={[
-                              styles.selectOptionText,
-                              selectedUsers.includes(user.id) && styles.selectedOptionText
-                            ]}>
-                              {user.name || user.username || 'Unknown User'}
-                            </Text>
-                            {user.email && (
-                              <Text style={[styles.selectOptionText, { fontSize: 12, color: '#6b7280', marginTop: 2 }]}>
-                                {user.email}
-                              </Text>
-                            )}
-                            {user.username && user.username !== user.name && (
-                              <Text style={[styles.selectOptionText, { fontSize: 11, color: '#9ca3af', marginTop: 1 }]}>
-                                @{user.username}
-                              </Text>
-                            )}
-                          </View>
-                          {selectedUsers.includes(user.id) && (
-                            <Ionicons name="checkmark-circle" size={18} color="#10b981" />
-                          )}
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  {users.length === 0 && (
-                    <View style={styles.emptyState}>
-                      <Text style={styles.emptyStateText}>No users found</Text>
-                    </View>
-                  )}
-                </ScrollView>
-              </View>
-            )}
-          </View>
-        </View>
-      </View>
-
-      {/* Status */}
-      <View style={[styles.inputGroup, styles.statusDropdownWrapper]}>
-        <Text style={styles.label}>Status *</Text>
-        <View style={styles.statusDropdownContainer}>
-          <TouchableOpacity
-            style={styles.select}
-            onPress={() => {
-              setShowStatusMenu(!showStatusMenu);
-              // Close other dropdowns when opening status
-              setShowPriorityMenu(false);
-              setShowHourMenu(false);
-              setShowMinuteMenu(false);
-              setShowProjectMenu(false);
-              setShowTeamMenu(false);
-              setShowUserMenu(false);
-            }}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.selectText}>{formData.status}</Text>
-            <Ionicons
-              name={showStatusMenu ? 'chevron-up' : 'chevron-down'}
-              size={16}
-              color="#6b7280"
-            />
-          </TouchableOpacity>
-          {showStatusMenu && (
-            <View style={[styles.statusSelectMenu]}>
-              {(['To Do', 'In Progress', 'Completed', 'Overdue'] as const).map(s => (
-                <TouchableOpacity
-                  key={s}
-                  style={styles.selectOption}
-                  onPress={() => {
-                    handleInputChange('status', s);
-                    setShowStatusMenu(false);
-                  }}
-                >
-                  <Text style={styles.selectOptionText}>{s}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
-      </View>
-
-      {/* Tags */}
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Tags</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Comma,separated"
-          value={formData.tags}
-          onChangeText={(value) => handleInputChange('tags', value)}
-        />
       </View>
 
       {/* Action Buttons */}
@@ -1105,8 +1092,8 @@ const styles = StyleSheet.create({
   },
   // Team dropdown styles
   teamDropdownWrapper: {
-    zIndex: 1500,
-    elevation: 8,
+    zIndex: 6000,
+    elevation: 30,
   },
   teamSelectMenu: {
     position: 'absolute',
@@ -1120,14 +1107,14 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 8,
+    elevation: 30,
     overflow: 'hidden',
-    zIndex: 1500,
+    zIndex: 6000,
   },
   // User dropdown styles
   userDropdownWrapper: {
-    zIndex: 1500,
-    elevation: 8,
+    zIndex: 6000,
+    elevation: 30,
   },
   userSelectMenu: {
     position: 'absolute',
@@ -1141,9 +1128,9 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 8,
+    elevation: 30,
     overflow: 'hidden',
-    zIndex: 1500,
+    zIndex: 6000,
   },
   // Status dropdown styles
   statusDropdownWrapper: {
@@ -1174,24 +1161,16 @@ const styles = StyleSheet.create({
   selectedItemsContainer: {
     backgroundColor: '#f8fafc',
     borderRadius: 8,
-    padding: 12,
+    paddingVertical: 8,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    maxHeight: 50,
   },
-  selectedItemsRow: {
-    marginBottom: 8,
-  },
-  selectedItemsLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 4,
-  },
-  selectedItemsList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
+  selectedItemsContent: {
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    gap: 8,
   },
   selectedItem: {
     flexDirection: 'row',
@@ -1240,6 +1219,10 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   dateCol: {
+    zIndex: 0,
+    elevation: 0,
+  },
+  tagsCol: {
     zIndex: 0,
     elevation: 0,
   },
@@ -1301,6 +1284,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  dropdownOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2000,
   },
 });
 

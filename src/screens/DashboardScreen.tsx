@@ -1007,7 +1007,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
-    paddingBottom: 80, // Add space for bottom tab bar
+    paddingBottom: 80, // Add space for bottom tab bar (now positioned within safe area)
   },
   notificationButton: {
     padding: 8,

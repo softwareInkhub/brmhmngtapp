@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { RootStackParamList, BottomTabParamList } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -27,6 +28,10 @@ const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<BottomTabParamList>();
 
 const TabNavigator = () => {
+  const insets = useSafeAreaInsets();
+  // Tab bar height without safe area consideration
+  const baseTabBarHeight = 70;
+  
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -68,14 +73,15 @@ const TabNavigator = () => {
           borderTopWidth: 1,
           paddingBottom: 8,
           paddingTop: 8,
-          height: 70,
+          height: baseTabBarHeight,
           elevation: 8,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 0.1,
           shadowRadius: 4,
           position: 'absolute',
-          bottom: 0,
+          // Position tab bar above the safe area (home indicator)
+          bottom: insets.bottom,
           left: 0,
           right: 0,
         },

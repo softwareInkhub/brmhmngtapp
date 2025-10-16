@@ -559,7 +559,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f6f7f8',
-    paddingBottom: 80, // Add space for bottom tab bar
+    paddingBottom: 80, // Add space for bottom tab bar (now positioned within safe area)
   },
   header: {
     backgroundColor: '#f6f7f8',
