@@ -11,6 +11,8 @@ import {
   TextInput,
   ScrollView,
   Modal,
+  Image,
+  Linking,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,7 +33,7 @@ const TasksScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [showSearchBar, setShowSearchBar] = useState(false);
+  const [showSearchBar, setShowSearchBar] = useState(true);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [showSubtasksModal, setShowSubtasksModal] = useState(false);
   const [modalSubtasks, setModalSubtasks] = useState<any[]>([]);
@@ -43,8 +45,12 @@ const TasksScreen = () => {
   const [selectedTaskForEdit, setSelectedTaskForEdit] = useState<any>(null);
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [editFormData, setEditFormData] = useState<any>({});
+  const [parentTask, setParentTask] = useState<any>(null);
+  const [loadingParentTask, setLoadingParentTask] = useState(false);
+  const [showImageViewer, setShowImageViewer] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string>('');
 
-  // Sort tasks by creation date (newest first) and filter by search query and status
+  // Sort tasks by updated date (newest first) and filter by search query and status
   const filteredTasks = [...state.tasks]
     .filter(task => {
       // Filter by search query
@@ -68,8 +74,9 @@ const TasksScreen = () => {
       return true;
     })
     .sort((a, b) => {
-      const dateA = new Date(a.createdAt).getTime();
-      const dateB = new Date(b.createdAt).getTime();
+      // Sort by updated date (most recently updated first)
+      const dateA = new Date(a.updatedAt || a.createdAt).getTime();
+      const dateB = new Date(b.updatedAt || b.createdAt).getTime();
       return dateB - dateA; // Newest first
     });
   
@@ -139,6 +146,68 @@ const TasksScreen = () => {
     }, [tasks.length])
   );
 
+  // Fetch parent task when task details modal opens
+  useEffect(() => {
+    const fetchParentTask = async () => {
+      if (selectedTaskForDetails && selectedTaskForDetails.parentId) {
+        setLoadingParentTask(true);
+        try {
+          // Try to find parent task in local state first
+          const localParent = state.tasks.find(t => t.id === selectedTaskForDetails.parentId);
+          if (localParent) {
+            setParentTask(localParent);
+          } else {
+            // Fetch from API if not in local state
+            const response = await apiService.getTaskById(selectedTaskForDetails.parentId);
+            if (response.success && response.data) {
+              setParentTask(response.data);
+            } else {
+              setParentTask(null);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching parent task:', error);
+          setParentTask(null);
+        } finally {
+          setLoadingParentTask(false);
+        }
+      } else {
+        setParentTask(null);
+      }
+    };
+
+    fetchParentTask();
+  }, [selectedTaskForDetails?.id, selectedTaskForDetails?.parentId]);
+
+  // Handle attachment click
+  const handleAttachmentClick = (attachment: any) => {
+    if (attachment.type === 'image') {
+      // Show image viewer
+      setSelectedImage(attachment.uri);
+      setShowImageViewer(true);
+    } else {
+      // For other file types, show options
+      Alert.alert(
+        attachment.name,
+        `File type: ${attachment.type}\nSize: ${formatAttachmentSize(attachment.size)}`,
+        [
+          {
+            text: 'Open',
+            onPress: () => {
+              if (attachment.uri) {
+                Linking.openURL(attachment.uri).catch(err => {
+                  console.error('Error opening file:', err);
+                  Alert.alert('Error', 'Cannot open this file type');
+                });
+              }
+            }
+          },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Completed':
@@ -206,6 +275,12 @@ const TasksScreen = () => {
     setShowSubtasksModal(true);
   };
 
+  const closeTaskDetailsModal = () => {
+    setShowTaskDetailsModal(false);
+    setIsEditingTask(false);
+    setEditFormData({});
+  };
+
   const handleSaveTaskEdit = async () => {
     if (!selectedTaskForDetails) return;
     
@@ -235,12 +310,18 @@ const TasksScreen = () => {
       
       if (response.success && response.data) {
         console.log('Update successful, updating UI...');
-        // Update the selected task data
-        setSelectedTaskForDetails({ ...selectedTaskForDetails, ...response.data });
-        setIsEditingTask(false);
         
         // Update the task in the global state
         dispatch({ type: 'UPDATE_TASK', payload: response.data });
+        
+        // Close modal and reset states
+        setShowTaskDetailsModal(false);
+        setIsEditingTask(false);
+        setEditFormData({});
+        setSelectedTaskForDetails(null);
+        
+        // Refresh tasks to ensure we have latest data and sort order
+        await fetchTasks();
         
         Alert.alert('Success', 'Task updated successfully');
       } else {
@@ -254,11 +335,25 @@ const TasksScreen = () => {
   };
 
   const handleEditTask = (taskId: string) => {
-    // Open edit modal instead of navigating to separate screen
+    // Open task details modal in edit mode
     const task = state.tasks.find(t => t.id === taskId);
     if (task) {
-      setSelectedTaskForEdit(task);
-      setShowEditTaskModal(true);
+      setSelectedTaskForDetails(task);
+      const freshFormData = {
+        title: task.title || '',
+        description: task.description || '',
+        project: task.project || '',
+        assignee: task.assignee || '',
+        startDate: task.startDate || '',
+        dueDate: task.dueDate || '',
+        estimatedHours: task.estimatedHours || 0,
+        timeSpent: task.timeSpent || '',
+        progress: task.progress || 0,
+        tags: task.tags || '',
+      };
+      setEditFormData(freshFormData);
+      setIsEditingTask(true);
+      setShowTaskDetailsModal(true);
     }
   };
 
@@ -351,6 +446,8 @@ const TasksScreen = () => {
           style={styles.taskCardTouchable}
           onPress={() => {
             setSelectedTaskForDetails(item);
+            setIsEditingTask(false);
+            setEditFormData({});
             setShowTaskDetailsModal(true);
           }}
           activeOpacity={0.8}
@@ -418,6 +515,14 @@ const TasksScreen = () => {
               </View>
             )}
 
+            {/* Assignee Section */}
+            {item.assignee && (
+              <View style={styles.assigneeSection}>
+                <Text style={styles.assigneeLabel}>Assigned to</Text>
+                <Text style={styles.assigneeName} numberOfLines={1}>{item.assignee}</Text>
+              </View>
+            )}
+
             {/* Project → Subtask/Parent Info Row (Bottom) */}
             {(item.project || item.parentId || hasSubtasks) && (
               <View style={styles.metaInfoRow}>
@@ -465,6 +570,8 @@ const TasksScreen = () => {
           style={styles.gridTaskContentContainer}
           onPress={() => {
             setSelectedTaskForDetails(item);
+            setIsEditingTask(false);
+            setEditFormData({});
             setShowTaskDetailsModal(true);
           }}
           activeOpacity={0.8}
@@ -542,20 +649,17 @@ const TasksScreen = () => {
             )}
           </View>
 
-          {/* Assignee and Info Row */}
-          <View style={styles.gridInfoRow}>
-            {item.assignee && (
-              <View style={styles.gridAssigneeInfo}>
-                <View style={styles.gridAssigneeAvatar}>
-                  <Text style={styles.gridAssigneeInitial}>
-                    {item.assignee.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-                <Text style={styles.gridAssigneeName} numberOfLines={1}>{item.assignee}</Text>
-              </View>
-            )}
-            
-            <View style={styles.gridBadgesRow}>
+          {/* Assignee Section */}
+          {item.assignee && (
+            <View style={styles.gridAssigneeSection}>
+              <Text style={styles.gridAssigneeLabel}>Assigned to</Text>
+              <Text style={styles.gridAssigneeNameText} numberOfLines={1}>{item.assignee}</Text>
+            </View>
+          )}
+
+          {/* Info Row with Badges */}
+          {(hasSubtasks || item.estimatedHours > 0) && (
+            <View style={styles.gridBadgesContainer}>
               {hasSubtasks && (
                 <View style={styles.gridSubtaskBadge}>
                   <Ionicons name="list" size={10} color="#8b5cf6" />
@@ -569,7 +673,7 @@ const TasksScreen = () => {
                 </View>
               )}
             </View>
-          </View>
+          )}
         </TouchableOpacity>
       </View>
     );
@@ -598,31 +702,27 @@ const TasksScreen = () => {
       {/* Profile Header */}
       <ProfileHeader
         title="My Tasks"
-        // subtitle="Task management"
-        rightElement={(() => {
-          if (!hasPermission('projectmanagement','crud')) return null;
-          return (
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => setShowCreateTaskModal(true)}
-            >
-              <Ionicons name="add-circle" size={24} color="#0ea5e9" />
-            </TouchableOpacity>
-          );
-        })()}
+        rightElement={
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => setShowCreateTaskModal(true)}
+          >
+            <Ionicons name="add-circle" size={40} color="#0ea5e9" />
+          </TouchableOpacity>
+        }
         onMenuPress={() => setSidebarVisible(true)}
         onProfilePress={() => {
           // Handle profile navigation
         }}
         onRightElementPress={() => {
-          if (!hasPermission('projectmanagement','crud')) return;
           setShowCreateTaskModal(true);
         }}
+        onNotificationsPress={() => (navigation as any).navigate('Notifications')}
       />
         
 
         {/* Search Bar and Icons */}
-        <View style={[styles.searchContainer, showSearchBar && styles.searchContainerWithBar]}>
+        <View style={[styles.searchContainer, styles.searchContainerWithBar]}>
           {showSearchBar && (
             <View style={styles.searchBarWrapper}>
               <View style={[styles.searchBar, styles.searchBarActive]}>
@@ -639,12 +739,9 @@ const TasksScreen = () => {
           )}
           
           <View style={styles.iconsContainer}>
-            <TouchableOpacity 
-              style={styles.searchIconButton}
-              onPress={() => setShowSearchBar(!showSearchBar)}
-            >
-              <Ionicons name="search-outline" size={20} color="#6b7280" />
-            </TouchableOpacity>
+            <View style={styles.searchIconButton}>
+              <Ionicons name="search-outline" size={20} color="#137fec" />
+            </View>
             
             <TouchableOpacity 
               style={styles.filterIcon}
@@ -807,6 +904,7 @@ const TasksScreen = () => {
           <FlatList
             key={viewMode} // Force re-render when view mode changes
             data={tasks}
+            extraData={state.tasks} // Force re-render when tasks array changes
             renderItem={viewMode === 'list' ? renderTaskItem : renderGridTaskItem}
             keyExtractor={(item) => item.id}
             style={styles.taskList}
@@ -849,6 +947,8 @@ const TasksScreen = () => {
                       onPress={() => {
                         setShowSubtasksModal(false);
                         setSelectedTaskForDetails(st);
+                        setIsEditingTask(false);
+                        setEditFormData({});
                         setShowTaskDetailsModal(true);
                       }}
                     >
@@ -873,13 +973,13 @@ const TasksScreen = () => {
           visible={showTaskDetailsModal}
           transparent
           animationType="slide"
-          onRequestClose={() => setShowTaskDetailsModal(false)}
+          onRequestClose={closeTaskDetailsModal}
         >
           <View style={styles.taskDetailsBackdrop}>
             <TouchableOpacity 
               style={styles.taskDetailsBackdropTouchable}
               activeOpacity={1}
-              onPress={() => setShowTaskDetailsModal(false)}
+              onPress={closeTaskDetailsModal}
             />
             <View style={[styles.taskDetailsModal, { paddingBottom: insets.bottom > 0 ? insets.bottom : 16 }]}>
             <View style={styles.taskDetailsHeader}>
@@ -890,14 +990,26 @@ const TasksScreen = () => {
                     // Save changes
                     handleSaveTaskEdit();
                   } else {
-                    // Start editing
+                    // Start editing - ensure we have fresh data
+                    const freshFormData = {
+                      title: selectedTaskForDetails.title || '',
+                      description: selectedTaskForDetails.description || '',
+                      project: selectedTaskForDetails.project || '',
+                      assignee: selectedTaskForDetails.assignee || '',
+                      startDate: selectedTaskForDetails.startDate || '',
+                      dueDate: selectedTaskForDetails.dueDate || '',
+                      estimatedHours: selectedTaskForDetails.estimatedHours || 0,
+                      timeSpent: selectedTaskForDetails.timeSpent || '',
+                      progress: selectedTaskForDetails.progress || 0,
+                      tags: selectedTaskForDetails.tags || '',
+                    };
+                    setEditFormData(freshFormData);
                     setIsEditingTask(true);
-                    setEditFormData({ ...selectedTaskForDetails });
                   }
                 }}>
                   <Ionicons name={isEditingTask ? "checkmark" : "pencil"} size={20} color="#0ea5e9" />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => setShowTaskDetailsModal(false)}>
+                <TouchableOpacity onPress={closeTaskDetailsModal}>
                   <Ionicons name="close" size={24} color="#6b7280" />
                 </TouchableOpacity>
               </View>
@@ -957,6 +1069,40 @@ const TasksScreen = () => {
                       />
                     ) : (
                       <Text style={styles.taskDetailsDescription}>{selectedTaskForDetails?.description || 'No description provided'}</Text>
+                    )}
+
+                    {/* Parent Task (if subtask) */}
+                    {selectedTaskForDetails?.parentId && (
+                      <View style={styles.parentTaskSection}>
+                        <View style={styles.parentTaskHeader}>
+                          <Ionicons name="link-outline" size={16} color="#6b7280" />
+                          <Text style={styles.parentTaskLabel}>Part of Parent Task</Text>
+                        </View>
+                        {loadingParentTask ? (
+                          <ActivityIndicator size="small" color="#3b82f6" />
+                        ) : parentTask ? (
+                          <TouchableOpacity 
+                            style={styles.parentTaskCard}
+                            onPress={() => {
+                              setSelectedTaskForDetails(parentTask);
+                              setIsEditingTask(false);
+                              setEditFormData({});
+                            }}
+                          >
+                            <View style={styles.parentTaskContent}>
+                              <Text style={styles.parentTaskTitle} numberOfLines={1}>
+                                {parentTask.title || 'Untitled Task'}
+                              </Text>
+                              <Text style={styles.parentTaskMeta} numberOfLines={1}>
+                                {parentTask.status} • {parentTask.priority} Priority
+                              </Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color="#3b82f6" />
+                          </TouchableOpacity>
+                        ) : (
+                          <Text style={styles.parentTaskError}>Parent task not found</Text>
+                        )}
+                      </View>
                     )}
 
                     {/* Task Details Grid */}
@@ -1101,6 +1247,8 @@ const TasksScreen = () => {
                               style={styles.taskDetailsSubtaskItem} 
                               onPress={() => {
                                 setSelectedTaskForDetails(st);
+                                setIsEditingTask(false);
+                                setEditFormData({});
                               }}
                             >
                               <View style={[styles.taskDetailsSubtaskStatus, { backgroundColor: getStatusColor(st.status).bg }]}> 
@@ -1130,6 +1278,61 @@ const TasksScreen = () => {
                         </View>
                       </View>
                     )}
+
+                    {/* Attachments */}
+                    {selectedTaskForDetails?.attachments && (() => {
+                      try {
+                        const attachmentsList = JSON.parse(selectedTaskForDetails.attachments);
+                        if (Array.isArray(attachmentsList) && attachmentsList.length > 0) {
+                          return (
+                            <View style={styles.taskDetailsAttachmentsSection}>
+                              <Text style={styles.taskDetailsSectionTitle}>Attachments ({attachmentsList.length})</Text>
+                              <View style={styles.taskDetailsAttachmentsList}>
+                                {attachmentsList.map((attachment: any) => (
+                                  <TouchableOpacity 
+                                    key={attachment.id} 
+                                    style={styles.taskDetailsAttachmentItem}
+                                    onPress={() => handleAttachmentClick(attachment)}
+                                    activeOpacity={0.7}
+                                  >
+                                    {attachment.type === 'image' && attachment.uri ? (
+                                      <Image 
+                                        source={{ uri: attachment.uri }} 
+                                        style={styles.taskDetailsAttachmentThumbnail} 
+                                      />
+                                    ) : (
+                                      <View style={styles.taskDetailsAttachmentIcon}>
+                                        <Ionicons 
+                                          name={getAttachmentIcon(attachment.type) as any} 
+                                          size={24} 
+                                          color="#3b82f6" 
+                                        />
+                                      </View>
+                                    )}
+                                    <View style={styles.taskDetailsAttachmentInfo}>
+                                      <Text style={styles.taskDetailsAttachmentName} numberOfLines={1}>
+                                        {attachment.name}
+                                      </Text>
+                                      <Text style={styles.taskDetailsAttachmentMeta}>
+                                        {formatAttachmentSize(attachment.size)} • {attachment.type}
+                                      </Text>
+                                    </View>
+                                    <Ionicons 
+                                      name={attachment.type === 'image' ? 'eye-outline' : 'open-outline'} 
+                                      size={20} 
+                                      color="#3b82f6" 
+                                    />
+                                  </TouchableOpacity>
+                                ))}
+                              </View>
+                            </View>
+                          );
+                        }
+                      } catch (e) {
+                        console.error('Error parsing attachments:', e);
+                      }
+                      return null;
+                    })()}
                   </View>
                 </ScrollView>
               )}
@@ -1198,6 +1401,28 @@ const TasksScreen = () => {
             </View>
           </View>
         </Modal>
+
+        {/* Image Viewer Modal */}
+        <Modal
+          visible={showImageViewer}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowImageViewer(false)}
+        >
+          <View style={styles.imageViewerBackdrop}>
+            <TouchableOpacity 
+              style={styles.imageViewerCloseButton}
+              onPress={() => setShowImageViewer(false)}
+            >
+              <Ionicons name="close-circle" size={36} color="#ffffff" />
+            </TouchableOpacity>
+            <Image 
+              source={{ uri: selectedImage }} 
+              style={styles.imageViewerImage}
+              resizeMode="contain"
+            />
+          </View>
+        </Modal>
       </SafeAreaView>
   );
 };
@@ -1250,7 +1475,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 16,
     marginHorizontal: 8,
-    marginVertical: 8,
+    marginVertical: 4,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -1274,7 +1499,8 @@ const styles = StyleSheet.create({
     width: 4,
   },
   taskCardContent: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     paddingLeft: 20,
   },
   taskCardHeader: {
@@ -1295,7 +1521,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -12,
+    marginTop: 0,
     marginLeft: -12,
   },
   taskCardTitleNew: { 
@@ -1441,6 +1667,23 @@ const styles = StyleSheet.create({
     minWidth: 32,
     textAlign: 'right',
   },
+  assigneeSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+    marginTop: -8,
+  },
+  assigneeLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#6b7280',
+  },
+  assigneeName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
   taskCardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1525,8 +1768,6 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 10,
     paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
     flexWrap: 'wrap',
   },
   tagChip: {
@@ -1709,6 +1950,53 @@ const styles = StyleSheet.create({
     color: '#4b5563',
     lineHeight: 24,
     marginBottom: 24,
+  },
+  parentTaskSection: {
+    marginBottom: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  parentTaskHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 12,
+  },
+  parentTaskLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+  },
+  parentTaskCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 10,
+    padding: 12,
+    gap: 12,
+  },
+  parentTaskContent: {
+    flex: 1,
+  },
+  parentTaskTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1e40af',
+    marginBottom: 4,
+  },
+  parentTaskMeta: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  parentTaskError: {
+    fontSize: 13,
+    color: '#ef4444',
+    fontStyle: 'italic',
   },
   taskDetailsGrid: {
     flexDirection: 'row',
@@ -2112,6 +2400,23 @@ const styles = StyleSheet.create({
   gridDueDateOverdue: {
     color: '#ef4444',
   },
+  gridAssigneeSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 6,
+    marginTop: -4,
+  },
+  gridAssigneeLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#6b7280',
+  },
+  gridAssigneeNameText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
   gridInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2141,6 +2446,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#374151',
     maxWidth: 80,
+  },
+  gridBadgesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   gridBadgesRow: {
     flexDirection: 'row',
@@ -2511,6 +2821,91 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: 'white',
   },
+  // Attachments styles
+  taskDetailsAttachmentsSection: {
+    marginBottom: 24,
+  },
+  taskDetailsAttachmentsList: {
+    gap: 10,
+  },
+  taskDetailsAttachmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    padding: 12,
+  },
+  taskDetailsAttachmentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#eff6ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  taskDetailsAttachmentInfo: {
+    flex: 1,
+  },
+  taskDetailsAttachmentName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 2,
+  },
+  taskDetailsAttachmentMeta: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  taskDetailsAttachmentThumbnail: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: '#e5e7eb',
+  },
+  // Image Viewer styles
+  imageViewerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerCloseButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+  },
+  imageViewerImage: {
+    width: '100%',
+    height: '100%',
+  },
 });
+
+// Helper functions for attachments
+const getAttachmentIcon = (type: string): string => {
+  switch (type) {
+    case 'image': return 'image';
+    case 'video': return 'videocam';
+    case 'audio': return 'musical-notes';
+    case 'pdf': return 'document-text';
+    case 'document': return 'document';
+    case 'spreadsheet': return 'grid';
+    case 'presentation': return 'easel';
+    case 'archive': return 'archive';
+    default: return 'document-attach';
+  }
+};
+
+const formatAttachmentSize = (bytes: number): string => {
+  if (!bytes || bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+};
 
 export default TasksScreen;

@@ -39,7 +39,7 @@ const ProfileHeader: React.FC<ProfileHeaderProps> = ({
 
   // Use auth user data if available, otherwise use props
   const displayTitle = title || user?.name || 'Guest User';
-  const displaySubtitle = subtitle || user?.email || 'Welcome back';
+  const displaySubtitle = subtitle; // Only show subtitle if explicitly provided
 
   const handleLogout = () => {
     Alert.alert(
@@ -92,7 +92,7 @@ const ProfileHeader: React.FC<ProfileHeaderProps> = ({
         {/* Center: Title */}
         <View style={styles.centerContainer}>
           <Text style={styles.title}>{displayTitle}</Text>
-          <Text style={styles.subtitle}>{displaySubtitle}</Text>
+          {displaySubtitle && <Text style={styles.subtitle}>{displaySubtitle}</Text>}
         </View>
         
         <View style={styles.rightSection}>
@@ -198,8 +198,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#ffffff',
+    paddingVertical: 0.01,
+    backgroundColor: '#teal',
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
     shadowColor: '#000',

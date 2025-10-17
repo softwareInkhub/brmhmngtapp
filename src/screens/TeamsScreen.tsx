@@ -254,6 +254,7 @@ const TeamsScreen = () => {
           setShowCreateTeamModal(true);
         }}
         onMenuPress={() => setSidebarVisible(true)}
+        onNotificationsPress={() => (navigation as any).navigate('Notifications')}
       />
 
       {/* Search and Filter Bar */}

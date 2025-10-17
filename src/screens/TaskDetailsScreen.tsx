@@ -8,6 +8,9 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  Modal,
+  Image,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,6 +43,39 @@ const TaskDetailsScreen = () => {
   const [editPriority, setEditPriority] = useState('');
   const [editProgress, setEditProgress] = useState('');
   const [editTags, setEditTags] = useState('');
+  const [parentTask, setParentTask] = useState<Task | null>(null);
+  const [loadingParentTask, setLoadingParentTask] = useState(false);
+  const [showImageViewer, setShowImageViewer] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string>('');
+
+  // Handle attachment click
+  const handleAttachmentClick = (attachment: any) => {
+    if (attachment.type === 'image') {
+      // Show image viewer
+      setSelectedImage(attachment.uri);
+      setShowImageViewer(true);
+    } else {
+      // For other file types, show options
+      Alert.alert(
+        attachment.name,
+        `File type: ${attachment.type}\nSize: ${formatAttachmentSize(attachment.size)}`,
+        [
+          {
+            text: 'Open',
+            onPress: () => {
+              if (attachment.uri) {
+                Linking.openURL(attachment.uri).catch(err => {
+                  console.error('Error opening file:', err);
+                  Alert.alert('Error', 'Cannot open this file type');
+                });
+              }
+            }
+          },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+    }
+  };
 
   const fetchTask = async () => {
     try {
@@ -95,6 +131,39 @@ const TaskDetailsScreen = () => {
   useEffect(() => {
     fetchTask();
   }, [taskId]);
+
+  // Fetch parent task if this task has a parentId
+  useEffect(() => {
+    const fetchParentTask = async () => {
+      if (task && task.parentId) {
+        setLoadingParentTask(true);
+        try {
+          // Try to find parent task in local state first
+          const localParent = state.tasks.find(t => t.id === task.parentId);
+          if (localParent) {
+            setParentTask(localParent);
+          } else {
+            // Fetch from API if not in local state
+            const response = await apiService.getTaskById(task.parentId);
+            if (response.success && response.data) {
+              setParentTask(response.data);
+            } else {
+              setParentTask(null);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching parent task:', error);
+          setParentTask(null);
+        } finally {
+          setLoadingParentTask(false);
+        }
+      } else {
+        setParentTask(null);
+      }
+    };
+
+    fetchParentTask();
+  }, [task?.id, task?.parentId]);
 
   useEffect(() => {
     if (task) {
@@ -247,6 +316,7 @@ const TaskDetailsScreen = () => {
           // Handle profile navigation
         }}
         onRightElementPress={isEditing ? handleSaveEdit : handleToggleEdit}
+        onNotificationsPress={() => (navigation as any).navigate('Notifications')}
       />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -299,6 +369,39 @@ const TaskDetailsScreen = () => {
             />
           ) : (
             <Text style={styles.taskDescription}>{task?.description || 'No description provided'}</Text>
+          )}
+
+          {/* Parent Task (if subtask) */}
+          {task?.parentId && (
+            <View style={styles.parentTaskSection}>
+              <View style={styles.parentTaskHeader}>
+                <Ionicons name="link-outline" size={16} color="#6b7280" />
+                <Text style={styles.parentTaskLabel}>Part of Parent Task</Text>
+              </View>
+              {loadingParentTask ? (
+                <ActivityIndicator size="small" color="#3b82f6" />
+              ) : parentTask ? (
+                <TouchableOpacity 
+                  style={styles.parentTaskCard}
+                  onPress={() => {
+                    // Navigate to parent task
+                    (navigation as any).navigate('TaskDetails', { taskId: parentTask.id });
+                  }}
+                >
+                  <View style={styles.parentTaskContent}>
+                    <Text style={styles.parentTaskTitle} numberOfLines={1}>
+                      {parentTask.title || 'Untitled Task'}
+                    </Text>
+                    <Text style={styles.parentTaskMeta} numberOfLines={1}>
+                      {parentTask.status} • {parentTask.priority} Priority
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#3b82f6" />
+                </TouchableOpacity>
+              ) : (
+                <Text style={styles.parentTaskError}>Parent task not found</Text>
+              )}
+            </View>
           )}
 
           {/* Task Details */}
@@ -508,6 +611,61 @@ const TaskDetailsScreen = () => {
             </View>
           ) : null}
 
+          {/* Attachments Section */}
+          {task?.attachments && (() => {
+            try {
+              const attachmentsList = JSON.parse(task.attachments);
+              if (Array.isArray(attachmentsList) && attachmentsList.length > 0) {
+                return (
+                  <View style={styles.attachmentsSection}>
+                    <Text style={styles.sectionTitle}>Attachments ({attachmentsList.length})</Text>
+                    <View style={styles.attachmentsList}>
+                      {attachmentsList.map((attachment: any) => (
+                        <TouchableOpacity 
+                          key={attachment.id} 
+                          style={styles.attachmentItem}
+                          onPress={() => handleAttachmentClick(attachment)}
+                          activeOpacity={0.7}
+                        >
+                          {attachment.type === 'image' && attachment.uri ? (
+                            <Image 
+                              source={{ uri: attachment.uri }} 
+                              style={styles.attachmentThumbnail} 
+                            />
+                          ) : (
+                            <View style={styles.attachmentIcon}>
+                              <Ionicons 
+                                name={getAttachmentIcon(attachment.type) as any} 
+                                size={24} 
+                                color="#3b82f6" 
+                              />
+                            </View>
+                          )}
+                          <View style={styles.attachmentInfo}>
+                            <Text style={styles.attachmentName} numberOfLines={1}>
+                              {attachment.name}
+                            </Text>
+                            <Text style={styles.attachmentMeta}>
+                              {formatAttachmentSize(attachment.size)} • {attachment.type}
+                            </Text>
+                          </View>
+                          <Ionicons 
+                            name={attachment.type === 'image' ? 'eye-outline' : 'open-outline'} 
+                            size={20} 
+                            color="#3b82f6" 
+                          />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                );
+              }
+            } catch (e) {
+              console.error('Error parsing attachments:', e);
+            }
+            return null;
+          })()}
+
           {/* Comments Section */}
           <View style={styles.commentsSection}>
             <Text style={styles.sectionTitle}>Comments ({task?.comments || '0'})</Text>
@@ -531,6 +689,28 @@ const TaskDetailsScreen = () => {
           </View>
         </View>
       </ScrollView>
+
+      {/* Image Viewer Modal */}
+      <Modal
+        visible={showImageViewer}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowImageViewer(false)}
+      >
+        <View style={styles.imageViewerBackdrop}>
+          <TouchableOpacity 
+            style={styles.imageViewerCloseButton}
+            onPress={() => setShowImageViewer(false)}
+          >
+            <Ionicons name="close-circle" size={36} color="#ffffff" />
+          </TouchableOpacity>
+          <Image 
+            source={{ uri: selectedImage }} 
+            style={styles.imageViewerImage}
+            resizeMode="contain"
+          />
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -638,6 +818,53 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
+  },
+  parentTaskSection: {
+    marginBottom: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  parentTaskHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 12,
+  },
+  parentTaskLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+  },
+  parentTaskCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 10,
+    padding: 12,
+    gap: 12,
+  },
+  parentTaskContent: {
+    flex: 1,
+  },
+  parentTaskTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1e40af',
+    marginBottom: 4,
+  },
+  parentTaskMeta: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  parentTaskError: {
+    fontSize: 13,
+    color: '#ef4444',
+    fontStyle: 'italic',
   },
   detailsGrid: {
     flexDirection: 'row',
@@ -843,6 +1070,96 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#6b7280',
   },
+  // Attachments Section Styles
+  attachmentsSection: {
+    marginBottom: 24,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  attachmentsList: {
+    gap: 10,
+  },
+  attachmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    padding: 12,
+  },
+  attachmentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#eff6ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachmentInfo: {
+    flex: 1,
+  },
+  attachmentName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 2,
+  },
+  attachmentMeta: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  attachmentThumbnail: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: '#e5e7eb',
+  },
+  // Image Viewer styles
+  imageViewerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerCloseButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+  },
+  imageViewerImage: {
+    width: '100%',
+    height: '100%',
+  },
 });
+
+// Helper functions for attachments
+const getAttachmentIcon = (type: string): string => {
+  switch (type) {
+    case 'image': return 'image';
+    case 'video': return 'videocam';
+    case 'audio': return 'musical-notes';
+    case 'pdf': return 'document-text';
+    case 'document': return 'document';
+    case 'spreadsheet': return 'grid';
+    case 'presentation': return 'easel';
+    case 'archive': return 'archive';
+    default: return 'document-attach';
+  }
+};
+
+const formatAttachmentSize = (bytes: number): string => {
+  if (!bytes || bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+};
 
 export default TaskDetailsScreen;

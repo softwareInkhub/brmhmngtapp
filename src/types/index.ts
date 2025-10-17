@@ -15,6 +15,7 @@ export interface Task {
   progress: number;
   timeSpent: string;
   parentId: string | null;
+  attachments?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -134,6 +135,7 @@ export type RootStackParamList = {
   CreateTeam: undefined;
   CreateProject: undefined;
   CreateMeeting: undefined;
+  Notifications: undefined;
 };
 
 export type BottomTabParamList = {

@@ -511,6 +511,7 @@ const CalendarScreen = () => {
           // Handle profile navigation
         }}
         onRightElementPress={() => navigation.goBack()}
+        onNotificationsPress={() => (navigation as any).navigate('Notifications')}
       />
 
       <ScrollView 

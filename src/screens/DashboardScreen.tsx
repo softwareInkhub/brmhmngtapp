@@ -942,11 +942,7 @@ const DashboardScreen = () => {
   };
 
   const handleNotifications = () => {
-    Alert.alert(
-      'Notifications',
-      'You have 3 new notifications',
-      [{ text: 'OK' }]
-    );
+    navigation.navigate('Notifications');
   };
 
   const handleProfilePress = () => {

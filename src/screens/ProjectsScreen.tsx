@@ -273,6 +273,7 @@ const ProjectsScreen = ({ navigation }: any) => {
           setShowCreateProjectModal(true);
         }}
         onMenuPress={() => setSidebarVisible(true)}
+        onNotificationsPress={() => navigation.navigate('Notifications')}
       />
 
       {/* Search + Icons row */}

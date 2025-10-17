@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  Image,
 } from 'react-native';
 // Optional dependency to avoid type errors if not installed
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -22,6 +23,8 @@ const DateTimePicker: any = (() => {
   }
 })();
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { apiService } from '../services/api';
@@ -49,16 +52,22 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
   const [projects, setProjects] = useState<any[]>([]);
   const [showTeamMenu, setShowTeamMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showParentTaskMenu, setShowParentTaskMenu] = useState(false);
   const [teamSearch, setTeamSearch] = useState('');
   const [userSearch, setUserSearch] = useState('');
+  const [parentTaskSearch, setParentTaskSearch] = useState('');
   const [teams, setTeams] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [parentTasks, setParentTasks] = useState<any[]>([]);
   const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [hourValue, setHourValue] = useState<string>('0');
   const [minuteValue, setMinuteValue] = useState<string>('0');
   const [showDuePicker, setShowDuePicker] = useState(false);
   const [showStartPicker, setShowStartPicker] = useState(false);
+  const [attachments, setAttachments] = useState<any[]>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -72,6 +81,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
     startDate: '',
     estimatedHours: '',
     tags: '',
+    parentTask: '',
   });
 
   const handleInputChange = (field: string, value: string) => {
@@ -123,6 +133,179 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
     }));
   };
 
+  // File upload handlers
+  const handlePickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets) {
+        setUploadingFile(true);
+        const newAttachments = result.assets.map((asset) => ({
+          id: `file-${Date.now()}-${Math.random()}`,
+          name: asset.fileName || `image-${Date.now()}.jpg`,
+          uri: asset.uri,
+          type: asset.type || 'image',
+          mimeType: asset.mimeType || 'image/jpeg',
+          size: asset.fileSize || 0,
+          uploadedAt: new Date().toISOString(),
+        }));
+        
+        setAttachments(prev => [...prev, ...newAttachments]);
+        setUploadingFile(false);
+        setShowAttachmentMenu(false);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+      setUploadingFile(false);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission Required', 'Camera permission is required to take photos');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        quality: 0.8,
+        allowsEditing: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        setUploadingFile(true);
+        const asset = result.assets[0];
+        const newAttachment = {
+          id: `file-${Date.now()}-${Math.random()}`,
+          name: asset.fileName || `photo-${Date.now()}.jpg`,
+          uri: asset.uri,
+          type: 'image',
+          mimeType: asset.mimeType || 'image/jpeg',
+          size: asset.fileSize || 0,
+          uploadedAt: new Date().toISOString(),
+        };
+        
+        setAttachments(prev => [...prev, newAttachment]);
+        setUploadingFile(false);
+        setShowAttachmentMenu(false);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo');
+      setUploadingFile(false);
+    }
+  };
+
+  const handlePickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets) {
+        setUploadingFile(true);
+        
+        const newAttachments = result.assets.map((asset: any) => ({
+          id: `file-${Date.now()}-${Math.random()}`,
+          name: asset.name,
+          uri: asset.uri,
+          type: getFileType(asset.mimeType || asset.name),
+          mimeType: asset.mimeType || 'application/octet-stream',
+          size: asset.size || 0,
+          uploadedAt: new Date().toISOString(),
+        }));
+        
+        setAttachments(prev => [...prev, ...newAttachments]);
+        setUploadingFile(false);
+        setShowAttachmentMenu(false);
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document');
+      setUploadingFile(false);
+    }
+  };
+
+  const handlePickVideo = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsMultipleSelection: false,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        setUploadingFile(true);
+        const asset = result.assets[0];
+        const newAttachment = {
+          id: `file-${Date.now()}-${Math.random()}`,
+          name: asset.fileName || `video-${Date.now()}.mp4`,
+          uri: asset.uri,
+          type: 'video',
+          mimeType: asset.mimeType || 'video/mp4',
+          size: asset.fileSize || 0,
+          duration: asset.duration || 0,
+          uploadedAt: new Date().toISOString(),
+        };
+        
+        setAttachments(prev => [...prev, newAttachment]);
+        setUploadingFile(false);
+        setShowAttachmentMenu(false);
+      }
+    } catch (error) {
+      console.error('Error picking video:', error);
+      Alert.alert('Error', 'Failed to pick video');
+      setUploadingFile(false);
+    }
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments(prev => prev.filter(att => att.id !== id));
+  };
+
+  const getFileType = (mimeType: string): string => {
+    if (!mimeType) return 'file';
+    if (mimeType.startsWith('image/')) return 'image';
+    if (mimeType.startsWith('video/')) return 'video';
+    if (mimeType.startsWith('audio/')) return 'audio';
+    if (mimeType.includes('pdf')) return 'pdf';
+    if (mimeType.includes('word') || mimeType.includes('document')) return 'document';
+    if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return 'spreadsheet';
+    if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return 'presentation';
+    if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('compressed')) return 'archive';
+    return 'file';
+  };
+
+  const getFileIcon = (type: string): string => {
+    switch (type) {
+      case 'image': return 'image';
+      case 'video': return 'videocam';
+      case 'audio': return 'musical-notes';
+      case 'pdf': return 'document-text';
+      case 'document': return 'document';
+      case 'spreadsheet': return 'grid';
+      case 'presentation': return 'easel';
+      case 'archive': return 'archive';
+      default: return 'document-attach';
+    }
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
   const handleCreateTask = async () => {
     // Check if user has permission to create tasks (admin or manager only)
     if (!canManage()) {
@@ -152,6 +335,15 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
     setIsLoading(true);
 
     try {
+      // Find the parent task ID if a parent task is selected
+      let actualParentId = parentTaskId; // Use prop parentTaskId if provided
+      
+      if (formData.parentTask && !parentTaskId) {
+        // Find parent task by title
+        const selectedParentTask = parentTasks.find(task => task.title === formData.parentTask);
+        actualParentId = selectedParentTask?.id || null;
+      }
+
       const taskData = {
         title: formData.title.trim(),
         description: formData.description.trim(),
@@ -169,7 +361,8 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
         comments: '0',
         progress: 0,
         timeSpent: '0',
-        parentId: parentTaskId,
+        parentId: actualParentId,
+        attachments: JSON.stringify(attachments),
       };
 
       const response = await apiService.createTask(taskData);
@@ -181,9 +374,9 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
         dispatch({ type: 'ADD_TASK', payload: finalTask });
 
         // Handle subtask relationship if this is a subtask
-        if (parentTaskId) {
+        if (actualParentId) {
           try {
-            const parentRes = await apiService.getTaskById(parentTaskId);
+            const parentRes = await apiService.getTaskById(actualParentId);
             if (parentRes.success && parentRes.data) {
               const parent = parentRes.data;
               let subtasksArray: string[] = [];
@@ -200,7 +393,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
               // Add new subtask ID if not present
               if (!subtasksArray.includes(finalTask.id)) {
                 subtasksArray.push(finalTask.id);
-                await apiService.updateTask(parentTaskId, { 
+                await apiService.updateTask(actualParentId, { 
                   subtasks: JSON.stringify(subtasksArray) 
                 } as any);
               }
@@ -342,6 +535,16 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
           console.warn('⚠️ [CreateTaskForm] Failed to fetch users:', usersRes.error);
           setUsers([]);
         }
+
+        // Fetch existing tasks for parent task selection
+        const tasksRes = await apiService.getTasks();
+        if (mounted && tasksRes.success && tasksRes.data) {
+          setParentTasks(tasksRes.data as any[]);
+          console.log('📋 [CreateTaskForm] Fetched parent tasks:', tasksRes.data.length);
+        } else {
+          console.warn('⚠️ [CreateTaskForm] Failed to fetch parent tasks:', tasksRes.error);
+          setParentTasks([]);
+        }
       } catch (error) {
         console.error('Error fetching data:', error);
       }
@@ -352,7 +555,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
   return (
     <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
       {/* Dropdown Overlay - Close dropdowns when clicking outside */}
-      {(showPriorityMenu || showStatusMenu || showHourMenu || showMinuteMenu || showProjectMenu || showTeamMenu || showUserMenu) && (
+      {(showPriorityMenu || showStatusMenu || showHourMenu || showMinuteMenu || showProjectMenu || showTeamMenu || showUserMenu || showParentTaskMenu) && (
         <TouchableOpacity
           style={styles.dropdownOverlay}
           activeOpacity={1}
@@ -364,6 +567,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
             setShowProjectMenu(false);
             setShowTeamMenu(false);
             setShowUserMenu(false);
+            setShowParentTaskMenu(false);
           }}
         />
       )}
@@ -390,6 +594,93 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
           multiline
           numberOfLines={4}
         />
+      </View>
+
+      {/* Parent Task */}
+      <View style={[styles.inputGroup, styles.parentTaskDropdownWrapper]}>
+        <Text style={styles.label}>Subtask Of (Optional)</Text>
+        <View style={styles.parentTaskDropdownContainer}>
+          <TouchableOpacity
+            style={styles.select}
+            onPress={() => {
+              setShowParentTaskMenu(!showParentTaskMenu);
+              // Close other dropdowns when opening parent task
+              setShowPriorityMenu(false);
+              setShowHourMenu(false);
+              setShowMinuteMenu(false);
+              setShowProjectMenu(false);
+              setShowStatusMenu(false);
+              setShowTeamMenu(false);
+              setShowUserMenu(false);
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.selectText} numberOfLines={1}>
+              {formData.parentTask || 'Select parent task'}
+            </Text>
+            <Ionicons name={showParentTaskMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
+          </TouchableOpacity>
+          {showParentTaskMenu && (
+            <View style={[styles.parentTaskSelectMenu]}>
+              <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: 'white' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+                  <Ionicons name="search" size={14} color="#9ca3af" />
+                  <TextInput
+                    value={parentTaskSearch}
+                    onChangeText={setParentTaskSearch}
+                    placeholder="Search parent tasks"
+                    placeholderTextColor="#9ca3af"
+                    style={{ marginLeft: 6, flex: 1, color: '#111827', paddingVertical: 0 }}
+                    autoFocus={false}
+                  />
+                </View>
+              </View>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled
+                style={{ maxHeight: 220 }}
+                contentContainerStyle={{ paddingBottom: 8 }}
+                showsVerticalScrollIndicator={true}
+              >
+                <TouchableOpacity
+                  style={styles.selectOption}
+                  onPress={() => {
+                    handleInputChange('parentTask', '');
+                    setShowParentTaskMenu(false);
+                  }}
+                >
+                  <Text style={styles.selectOptionText}>No Parent Task</Text>
+                </TouchableOpacity>
+                {(parentTasks || [])
+                  .filter(task => !parentTaskSearch.trim() || (task.title || '').toLowerCase().includes(parentTaskSearch.toLowerCase()))
+                  .map((task, idx) => (
+                    <TouchableOpacity
+                      key={task.id || String(idx)}
+                      style={styles.selectOption}
+                      onPress={() => {
+                        handleInputChange('parentTask', task.title || '');
+                        setShowParentTaskMenu(false);
+                      }}
+                    >
+                      <Text style={styles.selectOptionText} numberOfLines={1}>
+                        {task.title || 'Untitled Task'}
+                      </Text>
+                      {task.project && (
+                        <Text style={[styles.selectOptionText, { fontSize: 12, color: '#6b7280', marginTop: 2 }]} numberOfLines={1}>
+                          Project: {task.project}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                {parentTasks.length === 0 && (
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>No parent tasks found</Text>
+                  </View>
+                )}
+              </ScrollView>
+            </View>
+          )}
+        </View>
       </View>
 
       {/* Assignment Section */}
@@ -440,6 +731,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
               onPress={() => {
                 setShowTeamMenu(!showTeamMenu);
                 setShowUserMenu(false);
+                setShowParentTaskMenu(false);
                 // Close other dropdowns
                 setShowPriorityMenu(false);
                 setShowHourMenu(false);
@@ -515,6 +807,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
               onPress={() => {
                 setShowUserMenu(!showUserMenu);
                 setShowTeamMenu(false);
+                setShowParentTaskMenu(false);
                 // Close other dropdowns
                 setShowPriorityMenu(false);
                 setShowHourMenu(false);
@@ -612,14 +905,17 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
           <View style={styles.priorityDropdownContainer}>
             <TouchableOpacity
               style={styles.select}
-              onPress={() => {
-                setShowPriorityMenu(!showPriorityMenu);
-                // Close other dropdowns when opening priority
-                setShowHourMenu(false);
-                setShowMinuteMenu(false);
-                setShowProjectMenu(false);
-                setShowStatusMenu(false);
-              }}
+            onPress={() => {
+              setShowPriorityMenu(!showPriorityMenu);
+              // Close other dropdowns when opening priority
+              setShowHourMenu(false);
+              setShowMinuteMenu(false);
+              setShowProjectMenu(false);
+              setShowStatusMenu(false);
+              setShowTeamMenu(false);
+              setShowUserMenu(false);
+              setShowParentTaskMenu(false);
+            }}
               activeOpacity={0.8}
             >
               <Text style={styles.selectText}>{formData.priority}</Text>
@@ -660,6 +956,9 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
                   setShowPriorityMenu(false);
                   setShowProjectMenu(false);
                   setShowStatusMenu(false);
+                  setShowTeamMenu(false);
+                  setShowUserMenu(false);
+                  setShowParentTaskMenu(false);
                 }}
                 activeOpacity={0.8}
               >
@@ -702,6 +1001,9 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
                   setShowPriorityMenu(false);
                   setShowProjectMenu(false);
                   setShowStatusMenu(false);
+                  setShowTeamMenu(false);
+                  setShowUserMenu(false);
+                  setShowParentTaskMenu(false);
                 }}
                 activeOpacity={0.8}
               >
@@ -815,6 +1117,9 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
               setShowHourMenu(false);
               setShowMinuteMenu(false);
               setShowStatusMenu(false);
+              setShowTeamMenu(false);
+              setShowUserMenu(false);
+              setShowParentTaskMenu(false);
             }}
             activeOpacity={0.8}
           >
@@ -916,6 +1221,82 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
             onChangeText={(value) => handleInputChange('tags', value)}
           />
         </View>
+      </View>
+
+      {/* Attachments Section */}
+      <View style={styles.inputGroup}>
+        <View style={styles.attachmentHeader}>
+          <Text style={styles.label}>Attachments</Text>
+          <TouchableOpacity
+            style={styles.addAttachmentButton}
+            onPress={() => setShowAttachmentMenu(!showAttachmentMenu)}
+            disabled={uploadingFile}
+          >
+            <Ionicons name="attach" size={18} color="#3b82f6" />
+            <Text style={styles.addAttachmentText}>Add Files</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Attachment Menu */}
+        {showAttachmentMenu && (
+          <View style={styles.attachmentMenu}>
+            <TouchableOpacity style={styles.attachmentMenuItem} onPress={handleTakePhoto}>
+              <Ionicons name="camera" size={20} color="#3b82f6" />
+              <Text style={styles.attachmentMenuText}>Take Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.attachmentMenuItem} onPress={handlePickImage}>
+              <Ionicons name="image" size={20} color="#10b981" />
+              <Text style={styles.attachmentMenuText}>Choose Photos</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.attachmentMenuItem} onPress={handlePickVideo}>
+              <Ionicons name="videocam" size={20} color="#f59e0b" />
+              <Text style={styles.attachmentMenuText}>Choose Video</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.attachmentMenuItem} onPress={handlePickDocument}>
+              <Ionicons name="document-text" size={20} color="#ef4444" />
+              <Text style={styles.attachmentMenuText}>Choose Document</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Uploaded Files Display */}
+        {attachments.length > 0 && (
+          <View style={styles.attachmentsList}>
+            {attachments.map((attachment) => (
+              <View key={attachment.id} style={styles.attachmentItem}>
+                {attachment.type === 'image' && attachment.uri && (
+                  <Image source={{ uri: attachment.uri }} style={styles.attachmentThumbnail} />
+                )}
+                {attachment.type !== 'image' && (
+                  <View style={styles.attachmentIconContainer}>
+                    <Ionicons name={getFileIcon(attachment.type) as any} size={24} color="#6b7280" />
+                  </View>
+                )}
+                <View style={styles.attachmentInfo}>
+                  <Text style={styles.attachmentName} numberOfLines={1}>
+                    {attachment.name}
+                  </Text>
+                  <Text style={styles.attachmentMeta}>
+                    {formatFileSize(attachment.size)} • {attachment.type}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.removeAttachmentButton}
+                  onPress={() => removeAttachment(attachment.id)}
+                >
+                  <Ionicons name="close-circle" size={22} color="#ef4444" />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {uploadingFile && (
+          <View style={styles.uploadingIndicator}>
+            <ActivityIndicator size="small" color="#3b82f6" />
+            <Text style={styles.uploadingText}>Processing file...</Text>
+          </View>
+        )}
       </View>
 
       {/* Action Buttons */}
@@ -1132,16 +1513,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     zIndex: 6000,
   },
-  // Status dropdown styles
-  statusDropdownWrapper: {
-    zIndex: 1000,
-    elevation: 5,
+  // Parent Task dropdown styles
+  parentTaskDropdownWrapper: {
+    zIndex: 7000,
+    elevation: 35,
   },
-  statusDropdownContainer: {
+  parentTaskDropdownContainer: {
     position: 'relative',
-    zIndex: 1000,
+    zIndex: 7000,
   },
-  statusSelectMenu: {
+  parentTaskSelectMenu: {
     position: 'absolute',
     top: 44,
     left: 0,
@@ -1153,9 +1534,34 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 35,
     overflow: 'hidden',
-    zIndex: 1000,
+    zIndex: 7000,
+  },
+  // Status dropdown styles
+  statusDropdownWrapper: {
+    zIndex: 3500,
+    elevation: 18,
+  },
+  statusDropdownContainer: {
+    position: 'relative',
+    zIndex: 3500,
+  },
+  statusSelectMenu: {
+    position: 'absolute',
+    bottom: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 18,
+    overflow: 'hidden',
+    zIndex: 3500,
   },
   // Selected items styles
   selectedItemsContainer: {
@@ -1291,7 +1697,111 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    zIndex: 2000,
+    zIndex: 1500,
+  },
+  // Attachment styles
+  attachmentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  addAttachmentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+    backgroundColor: '#eff6ff',
+  },
+  addAttachmentText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3b82f6',
+  },
+  attachmentMenu: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginBottom: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  attachmentMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  attachmentMenuText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#1f2937',
+  },
+  attachmentsList: {
+    gap: 10,
+  },
+  attachmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    padding: 10,
+  },
+  attachmentThumbnail: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: '#e5e7eb',
+  },
+  attachmentIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: '#e5e7eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachmentInfo: {
+    flex: 1,
+  },
+  attachmentName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 2,
+  },
+  attachmentMeta: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  removeAttachmentButton: {
+    padding: 4,
+  },
+  uploadingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    justifyContent: 'center',
+  },
+  uploadingText: {
+    fontSize: 14,
+    color: '#6b7280',
   },
 });
 

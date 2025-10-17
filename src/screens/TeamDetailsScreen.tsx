@@ -119,6 +119,7 @@ const TeamDetailsScreen = () => {
         onRightElementPress={() => {
           // Handle edit navigation
         }}
+        onNotificationsPress={() => (navigation as any).navigate('Notifications')}
       />
 
       {/* Team Info */}
