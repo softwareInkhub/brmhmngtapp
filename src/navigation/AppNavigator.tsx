@@ -31,7 +31,7 @@ const Tab = createBottomTabNavigator<BottomTabParamList>();
 const TabNavigator = () => {
   const insets = useSafeAreaInsets();
   // Tab bar height without safe area consideration
-  const baseTabBarHeight = 70;
+  const baseTabBarHeight = 55;
   
   return (
     <Tab.Navigator
@@ -42,7 +42,8 @@ const TabNavigator = () => {
           if (route.name === 'Dashboard') {
             iconName = focused ? 'grid' : 'grid-outline';
           } else           if (route.name === 'Tasks') {
-            iconName = 'clipboard';
+            // Show + icon when focused (on Tasks screen), clipboard when not focused
+            iconName = focused ? 'add' : 'clipboard-outline';
           } else if (route.name === 'Teams') {
             iconName = focused ? 'people' : 'people-outline';
           } else if (route.name === 'Calendar') {
@@ -58,7 +59,7 @@ const TabNavigator = () => {
             return (
               <View style={styles.tasksTabContainer}>
                 <View style={[styles.tasksTabGradient, { backgroundColor: focused ? '#0ea5e9' : '#6b7280' }]}>
-                  <Ionicons name={iconName} size={24} color="#ffffff" />
+                  <Ionicons name={iconName} size={focused ? 28 : 24} color="#ffffff" />
                 </View>
               </View>
             );
@@ -68,21 +69,15 @@ const TabNavigator = () => {
         },
         tabBarActiveTintColor: '#137fec',
         tabBarInactiveTintColor: '#6b7280',
+        tabBarHideOnKeyboard: false,
         tabBarStyle: {
           backgroundColor: '#ffffff',
-          borderTopColor: '#e5e7eb',
-          borderTopWidth: 1,
-          paddingBottom: 8,
-          paddingTop: 8,
-          height: baseTabBarHeight,
-          elevation: 8,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 4,
+          borderTopWidth: 0,
+          paddingBottom: 6 + insets.bottom,
+          paddingTop: 0,
+          height: baseTabBarHeight + insets.bottom,
           position: 'absolute',
-          // Position tab bar above the safe area (home indicator)
-          bottom: insets.bottom,
+          bottom: 0,
           left: 0,
           right: 0,
         },
@@ -97,7 +92,25 @@ const TabNavigator = () => {
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Projects" component={ProjectsScreen} />
-      <Tab.Screen name="Tasks" component={TasksScreen} />
+      <Tab.Screen 
+        name="Tasks" 
+        component={TasksScreen}
+        listeners={({ navigation, route }) => ({
+          tabPress: (e) => {
+            // Check if we're already on the Tasks screen
+            const state = navigation.getState();
+            const currentRoute = state.routes[state.index];
+            
+            if (currentRoute.name === 'Tasks') {
+              // We're already on Tasks screen, prevent default navigation
+              e.preventDefault();
+              // Trigger the task creation modal by dispatching an event
+              // The TasksScreen will listen for this event
+              navigation.navigate('Tasks', { openCreateModal: true });
+            }
+          },
+        })}
+      />
       <Tab.Screen name="Teams" component={TeamsScreen} />
       <Tab.Screen name="Calendar" component={CalendarScreen} />
     </Tab.Navigator>

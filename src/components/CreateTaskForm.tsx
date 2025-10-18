@@ -25,6 +25,7 @@ const DateTimePicker: any = (() => {
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
+import { Audio } from 'expo-av';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { apiService } from '../services/api';
@@ -68,6 +69,9 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
   const [attachments, setAttachments] = useState<any[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -271,6 +275,107 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
     setAttachments(prev => prev.filter(att => att.id !== id));
   };
 
+  // Audio recording handlers
+  const startRecording = async () => {
+    try {
+      // Request permissions
+      const permission = await Audio.requestPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission Required', 'Microphone permission is required to record audio');
+        return;
+      }
+
+      // Set audio mode for recording
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      // Start recording
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      
+      setRecording(recording);
+      setIsRecording(true);
+      setShowAttachmentMenu(false);
+
+      // Update duration every second
+      const interval = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+
+      // Store interval ID in recording object for cleanup
+      (recording as any).durationInterval = interval;
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      Alert.alert('Error', 'Failed to start recording');
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recording) return;
+
+    try {
+      setIsRecording(false);
+      await recording.stopAndUnloadAsync();
+      
+      // Clear duration interval
+      if ((recording as any).durationInterval) {
+        clearInterval((recording as any).durationInterval);
+      }
+
+      const uri = recording.getURI();
+      
+      if (uri) {
+        const newAttachment = {
+          id: `file-${Date.now()}-${Math.random()}`,
+          name: `recording-${Date.now()}.m4a`,
+          uri: uri,
+          type: 'audio',
+          mimeType: 'audio/m4a',
+          size: 0, // Size will be calculated if needed
+          duration: recordingDuration,
+          uploadedAt: new Date().toISOString(),
+        };
+        
+        setAttachments(prev => [...prev, newAttachment]);
+        Alert.alert('Success', 'Audio recorded successfully');
+      }
+
+      setRecording(null);
+      setRecordingDuration(0);
+    } catch (error) {
+      console.error('Error stopping recording:', error);
+      Alert.alert('Error', 'Failed to stop recording');
+    }
+  };
+
+  const cancelRecording = async () => {
+    if (!recording) return;
+
+    try {
+      setIsRecording(false);
+      await recording.stopAndUnloadAsync();
+      
+      // Clear duration interval
+      if ((recording as any).durationInterval) {
+        clearInterval((recording as any).durationInterval);
+      }
+
+      setRecording(null);
+      setRecordingDuration(0);
+    } catch (error) {
+      console.error('Error canceling recording:', error);
+    }
+  };
+
+  const formatDuration = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const getFileType = (mimeType: string): string => {
     if (!mimeType) return 'file';
     if (mimeType.startsWith('image/')) return 'image';
@@ -344,6 +449,38 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
         actualParentId = selectedParentTask?.id || null;
       }
 
+      // Upload attachments to S3
+      console.log('📤 Uploading attachments to S3...');
+      const uploadedAttachments = [];
+      
+      for (const attachment of attachments) {
+        try {
+          const uploadResult = await apiService.uploadToS3({
+            uri: attachment.uri,
+            name: attachment.name,
+            type: attachment.type,
+            mimeType: attachment.mimeType,
+          });
+
+          if (uploadResult.success && uploadResult.data) {
+            uploadedAttachments.push({
+              ...attachment,
+              url: uploadResult.data.url,
+              key: uploadResult.data.key,
+            });
+            console.log('✅ Uploaded:', attachment.name);
+          } else {
+            console.warn('⚠️ Failed to upload:', attachment.name, uploadResult.error);
+            // Keep local URI as fallback
+            uploadedAttachments.push(attachment);
+          }
+        } catch (error) {
+          console.error('❌ Error uploading:', attachment.name, error);
+          // Keep local URI as fallback
+          uploadedAttachments.push(attachment);
+        }
+      }
+
       const taskData = {
         title: formData.title.trim(),
         description: formData.description.trim(),
@@ -362,7 +499,8 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
         progress: 0,
         timeSpent: '0',
         parentId: actualParentId,
-        attachments: JSON.stringify(attachments),
+        attachments: JSON.stringify(uploadedAttachments),
+        threads: '[]', // Initialize empty threads array
       };
 
       const response = await apiService.createTask(taskData);
@@ -1252,10 +1390,35 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
               <Ionicons name="videocam" size={20} color="#f59e0b" />
               <Text style={styles.attachmentMenuText}>Choose Video</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.attachmentMenuItem} onPress={startRecording}>
+              <Ionicons name="mic" size={20} color="#8b5cf6" />
+              <Text style={styles.attachmentMenuText}>Record Audio</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.attachmentMenuItem} onPress={handlePickDocument}>
               <Ionicons name="document-text" size={20} color="#ef4444" />
               <Text style={styles.attachmentMenuText}>Choose Document</Text>
             </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Recording UI */}
+        {isRecording && (
+          <View style={styles.recordingContainer}>
+            <View style={styles.recordingIndicator}>
+              <View style={styles.recordingDot} />
+              <Text style={styles.recordingText}>Recording...</Text>
+              <Text style={styles.recordingTime}>{formatDuration(recordingDuration)}</Text>
+            </View>
+            <View style={styles.recordingActions}>
+              <TouchableOpacity style={styles.cancelRecordButton} onPress={cancelRecording}>
+                <Ionicons name="close-circle" size={24} color="#ef4444" />
+                <Text style={styles.cancelRecordText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.stopRecordButton} onPress={stopRecording}>
+                <Ionicons name="stop-circle" size={24} color="#10b981" />
+                <Text style={styles.stopRecordText}>Stop</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -1278,6 +1441,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({
                   </Text>
                   <Text style={styles.attachmentMeta}>
                     {formatFileSize(attachment.size)} • {attachment.type}
+                    {attachment.url && ' • ☁️ Uploaded'}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -1802,6 +1966,76 @@ const styles = StyleSheet.create({
   uploadingText: {
     fontSize: 14,
     color: '#6b7280',
+  },
+  // Recording styles
+  recordingContainer: {
+    backgroundColor: '#fef2f2',
+    borderWidth: 2,
+    borderColor: '#ef4444',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  recordingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+  recordingDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#ef4444',
+  },
+  recordingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#991b1b',
+  },
+  recordingTime: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1f2937',
+    fontVariant: ['tabular-nums'],
+  },
+  recordingActions: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'center',
+  },
+  cancelRecordButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#fee2e2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  cancelRecordText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#991b1b',
+  },
+  stopRecordButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#dcfce7',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  stopRecordText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#166534',
   },
 });
 

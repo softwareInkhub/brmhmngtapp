@@ -9,6 +9,7 @@ import {
   ScrollView,
   TextInput,
   Alert,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,8 +46,9 @@ const TeamsScreen = () => {
   const [selectedTeam, setSelectedTeam] = useState<any>(null);
   
   // Search, filter, view mode
-  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchVisible, setSearchVisible] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
@@ -229,58 +231,54 @@ const TeamsScreen = () => {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       <Sidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
       {/* Profile Header */}
       <ProfileHeader
         title="My Teams"
-        subtitle="Team management"
-        rightElement={(() => {
-          if (!hasPermission('projectmanagement','crud')) return null;
-          return (
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => setShowCreateTeamModal(true)}
-            >
-              <Ionicons name="add" size={24} color="#137fec" />
-            </TouchableOpacity>
-          );
-        })()}
+        subtitle=""
         onProfilePress={() => {
           // Handle profile navigation
-        }}
-        onRightElementPress={() => {
-          if (!hasPermission('projectmanagement','crud')) return;
-          setShowCreateTeamModal(true);
         }}
         onMenuPress={() => setSidebarVisible(true)}
         onNotificationsPress={() => (navigation as any).navigate('Notifications')}
       />
 
-      {/* Search and Filter Bar */}
-      <View style={styles.topBar}>
+      {/* Search Bar and Icons */}
+      <View style={[styles.topBar, styles.searchContainerWithBar]}>
         {searchVisible && (
-          <View style={[styles.searchContainer, { borderColor: '#c084fc', borderWidth: 1 }]}>
-            <Ionicons name="search" size={18} color="#9ca3af" style={{ marginRight: 8 }} />
+          <View style={[styles.searchBar, isSearchFocused && styles.searchBarFocused]}>
+            <Ionicons name="search-outline" size={18} color="#9ca3af" style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
               placeholder="Search teams..."
-              placeholderTextColor="#9ca3af"
               value={searchQuery}
               onChangeText={setSearchQuery}
-              autoFocus
+              placeholderTextColor="#9ca3af"
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
             />
           </View>
         )}
-        <View style={styles.iconGroup}>
-          <TouchableOpacity style={styles.iconButton} onPress={() => setSearchVisible(!searchVisible)}>
-            <Ionicons name="search-outline" size={20} color="#6b7280" />
+        
+        <View style={styles.iconsContainer}>
+          <TouchableOpacity 
+            style={styles.filterIconButton}
+            onPress={() => setShowFilterDropdown(!showFilterDropdown)}
+          >
+            <Ionicons name="filter-outline" size={18} color="#6b7280" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} onPress={() => setShowFilterDropdown(!showFilterDropdown)}>
-            <Ionicons name="filter-outline" size={20} color="#6b7280" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} onPress={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}>
-            <Ionicons name={viewMode === 'list' ? 'apps-outline' : 'list-outline'} size={20} color="#6b7280" />
+          
+          <TouchableOpacity 
+            style={styles.toggleIcon}
+            onPress={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
+          >
+            <Ionicons 
+              name={viewMode === 'list' ? 'apps-outline' : 'list-outline'} 
+              size={18} 
+              color="#6b7280" 
+            />
           </TouchableOpacity>
         </View>
       </View>
@@ -552,6 +550,17 @@ const TeamsScreen = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Floating Action Button */}
+      {hasPermission('projectmanagement','crud') && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => setShowCreateTeamModal(true)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add" size={28} color="#ffffff" />
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 };
@@ -560,7 +569,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f6f7f8',
-    paddingBottom: 80, // Add space for bottom tab bar (now positioned within safe area)
+    paddingBottom: 45, // Add space for bottom tab bar
   },
   header: {
     backgroundColor: '#f6f7f8',
@@ -648,27 +657,85 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#fff',
+    paddingVertical: 6,
+    backgroundColor: '#f8fafc',
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-    minHeight: 56,
+    borderBottomColor: '#e2e8f0',
+    minHeight: 48,
   },
-  searchContainer: {
+  searchContainerWithBar: {
+    justifyContent: 'space-between',
+  },
+  searchBar: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f9fafb',
-    borderRadius: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    position: 'absolute',
-    left: 16,
-    right: 140,
+    height: 38,
+    marginRight: 12,
+  },
+  searchBarFocused: {
+    backgroundColor: '#ffffff',
+    borderColor: '#1e40af',
+    borderWidth: 1.5,
+  },
+  searchIcon: {
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
     color: '#111827',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    minHeight: 22,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  },
+  searchContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderRadius: 6,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    height: 32,
+    marginRight: 12,
+  },
+  iconsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  filterIconButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    height: 36,
+    width: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleIcon: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    height: 36,
+    width: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   iconGroup: {
     flexDirection: 'row',
@@ -812,6 +879,25 @@ const styles = StyleSheet.create({
   gridCardMembers: {
     fontSize: 12,
     color: '#6b7280',
+  },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 100,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#137fec',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#137fec',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
   },
 });
 

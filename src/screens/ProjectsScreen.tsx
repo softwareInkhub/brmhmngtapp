@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Dimensions, TextInput, Modal, ScrollView, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Dimensions, TextInput, Modal, ScrollView, Alert, Platform, StatusBar } from 'react-native';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import ProfileHeader from '../components/ProfileHeader';
@@ -17,7 +17,8 @@ const ProjectsScreen = ({ navigation }: any) => {
   const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showSearchBar, setShowSearchBar] = useState(false);
+  const [showSearchBar, setShowSearchBar] = useState(true);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [showProjectDetailsModal, setShowProjectDetailsModal] = useState(false);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
@@ -259,46 +260,43 @@ const ProjectsScreen = ({ navigation }: any) => {
 
   const { hasPermission } = useAuth();
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       <Sidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
       <ProfileHeader
         title="My Projects"
-        subtitle="Project management"
-        rightElement={(() => {
-          if (!hasPermission('projectmanagement','crud')) return null;
-          return <Ionicons name="add" size={24} color="#137fec" />;
-        })()}
-        onRightElementPress={() => {
-          if (!hasPermission('projectmanagement','crud')) return;
-          setShowCreateProjectModal(true);
-        }}
+        subtitle=""
         onMenuPress={() => setSidebarVisible(true)}
         onNotificationsPress={() => navigation.navigate('Notifications')}
       />
 
-      {/* Search + Icons row */}
-      <View style={styles.searchContainer}>
+      {/* Search Bar and Icons */}
+      <View style={[styles.searchContainer, styles.searchContainerWithBar]}>
         {showSearchBar && (
-          <View style={styles.searchBarWrapper}>
-            <View style={[styles.searchBar, styles.searchBarActive]}>
-              <TouchableOpacity onPress={() => setShowSearchBar(false)}>
-                <Ionicons name="close" size={18} color="#6b7280" />
-              </TouchableOpacity>
-              <View style={{ width: 8 }} />
-              <InputLike
-                value={searchQuery}
-                onChange={(t) => setSearchQuery(t)}
+          <View style={[styles.searchBar, isSearchFocused && styles.searchBarFocused]}>
+            <Ionicons name="search-outline" size={18} color="#9ca3af" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
                 placeholder="Search projects..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholderTextColor="#9ca3af"
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
               />
-            </View>
           </View>
         )}
-        <View style={styles.iconsRow}>
-          <TouchableOpacity style={styles.iconButton} onPress={() => setShowSearchBar((v) => !v)}>
-            <Ionicons name="search-outline" size={20} color="#6b7280" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} onPress={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}>
-            <Ionicons name={viewMode === 'list' ? 'apps-outline' : 'list-outline'} size={20} color="#6b7280" />
+        
+        <View style={styles.iconsContainer}>
+          <TouchableOpacity 
+            style={styles.toggleIcon}
+            onPress={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
+          >
+            <Ionicons 
+              name={viewMode === 'list' ? 'apps-outline' : 'list-outline'} 
+              size={18} 
+              color="#6b7280" 
+            />
           </TouchableOpacity>
         </View>
       </View>
@@ -738,7 +736,7 @@ const ProjectsScreen = ({ navigation }: any) => {
                               <Text style={formStyles.selectOptionText}>{option}</Text>
                             </TouchableOpacity>
                           ))}
-                        </View>
+                </View>
                       )}
                     </View>
                   </View>
@@ -852,14 +850,14 @@ const ProjectsScreen = ({ navigation }: any) => {
                         <Ionicons name={showTeamMenu ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
                       </TouchableOpacity>
                       <TeamMultiSelectEnhanced
-                        teams={teamsOptions}
-                        selectedIds={selectedTeamIds}
-                        setSelectedIds={setSelectedTeamIds}
+                    teams={teamsOptions}
+                    selectedIds={selectedTeamIds}
+                    setSelectedIds={setSelectedTeamIds}
                         teamSearch={teamSearch}
                         setTeamSearch={setTeamSearch}
                         showMenu={showTeamMenu}
-                      />
-                    </View>
+                  />
+                </View>
                     
                     <View style={[formStyles.col, formStyles.userDropdownWrapper]}>
                       <TouchableOpacity
@@ -962,6 +960,17 @@ const ProjectsScreen = ({ navigation }: any) => {
           </View>
         </View>
       </Modal>
+
+      {/* Floating Action Button */}
+      {hasPermission('projectmanagement','crud') && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => setShowCreateProjectModal(true)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add" size={28} color="#ffffff" />
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 };
@@ -969,16 +978,70 @@ const ProjectsScreen = ({ navigation }: any) => {
 const cardWidth = (width - 16 * 2 - 8) / 2;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f6f7f8', paddingBottom: 80 },
+  container: { flex: 1, backgroundColor: '#f6f7f8', paddingBottom: 45 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1f2937' },
   headerSubtitle: { fontSize: 12, color: '#6b7280' },
   addButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  searchContainer: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', paddingHorizontal: 16, minHeight: 48 },
-  searchBarWrapper: { flex: 1, marginRight: 12, position: 'absolute', left: 16, right: 90 },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: '#e5e7eb' },
-  searchBarActive: { borderColor: '#137fec' },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    backgroundColor: '#f8fafc',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    minHeight: 48,
+  },
+  searchContainerWithBar: {
+    justifyContent: 'space-between',
+  },
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    height: 36,
+    marginRight: 12,
+  },
+  searchBarFocused: {
+    backgroundColor: '#ffffff',
+    borderColor: '#1e40af',
+    borderWidth: 1.5,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#111827',
+    paddingVertical: 0,
+    height: 20,
+  },
+  iconsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  toggleIcon: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    height: 36,
+    width: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   iconsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 'auto' },
   iconButton: { padding: 8, borderRadius: 8, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb' },
   pillsContainer: { borderTopWidth: 1, borderTopColor: '#e5e7eb', paddingTop: 8, paddingBottom: 8, marginTop: 8 },
@@ -1201,6 +1264,25 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 2000,
   },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 100,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#137fec',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#137fec',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+  },
 });
 
 // Helper components & functions to mirror Tasks pills
@@ -1373,7 +1455,7 @@ const TeamMultiSelectEnhanced = ({ teams, selectedIds, setSelectedIds, teamSearc
               .filter(t => !teamSearch.trim() || (t.name || t.title || '').toLowerCase().includes(teamSearch.toLowerCase()))
               .map((team, idx) => {
                 const teamId = team.id || team.teamId || team.name;
-                return (
+            return (
                   <TouchableOpacity
                     key={teamId || idx}
                     style={[
@@ -1392,15 +1474,15 @@ const TeamMultiSelectEnhanced = ({ teams, selectedIds, setSelectedIds, teamSearc
                       {selectedIds.includes(teamId) && (
                         <Ionicons name="checkmark-circle" size={16} color="#10b981" />
                       )}
-                    </View>
+              </View>
                   </TouchableOpacity>
-                );
-              })}
+            );
+          })}
             {teams.length === 0 && (
               <View style={formStyles.emptyState}>
                 <Text style={formStyles.emptyStateText}>No teams found</Text>
-              </View>
-            )}
+        </View>
+      )}
           </ScrollView>
         </View>
       )}
@@ -1417,7 +1499,7 @@ const UserSelectEnhanced = ({ users, selectedId, setSelectedId, userSearch, setU
   setUserSearch: (s: string) => void;
   showMenu: boolean;
 }) => {
-  return (
+              return (
     <>
       {showMenu && (
         <View style={formStyles.userSelectMenu}>
@@ -1582,16 +1664,16 @@ const TaskMultiSelectEnhanced = ({ tasks, selectedIds, setSelectedIds, taskSearc
                         <Ionicons name="checkmark-circle" size={16} color="#10b981" />
                       )}
                     </View>
-                  </TouchableOpacity>
-                );
-              })}
+                </TouchableOpacity>
+              );
+            })}
             {tasks.length === 0 && (
               <View style={formStyles.emptyState}>
                 <Text style={formStyles.emptyStateText}>No tasks found</Text>
-              </View>
-            )}
-          </ScrollView>
         </View>
+      )}
+          </ScrollView>
+    </View>
       )}
     </>
   );

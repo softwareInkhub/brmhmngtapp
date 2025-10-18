@@ -4,6 +4,7 @@ const API_BASE_URL = 'https://brmh.in/crud';
 const AUTH_BASE_URL = 'https://brmh.in/auth';
 const AUTH_TABLE_NAME = 'brmh-users';
 const NOTIFICATION_URL = 'https://brmh.in/notify/11d0d0c0-9745-48bd-bbbe-9aa0c517f294';
+const S3_UPLOAD_URL = 'https://brmh.in/s3/upload';
 
 // Helper function to format dates
 const formatDate = (dateString: string): string => {
@@ -1033,6 +1034,126 @@ class ApiService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Logout request failed',
+      };
+    }
+  }
+
+  // S3 Upload Service
+  async uploadToS3(file: {
+    uri: string;
+    name: string;
+    type: string;
+    mimeType: string;
+  }): Promise<ApiResponse<{ url: string; key: string }>> {
+    try {
+      console.log('📤 [S3 UPLOAD] Uploading file:', file.name);
+      
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('file', {
+        uri: file.uri,
+        name: file.name,
+        type: file.mimeType,
+      } as any);
+      formData.append('folder', 'task-attachments');
+      
+      const response = await fetch(S3_UPLOAD_URL, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Upload failed: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('📤 [S3 UPLOAD] Upload successful:', data);
+
+      return {
+        success: true,
+        data: {
+          url: data.url || data.fileUrl || data.location,
+          key: data.key || data.fileKey || file.name,
+        },
+      };
+    } catch (error) {
+      console.error('📤 [S3 UPLOAD] Upload error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to upload file',
+      };
+    }
+  }
+
+  // Add comment/thread to a task
+  async addCommentToTask(taskId: string, comment: {
+    userId: string;
+    userName: string;
+    text: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      console.log('💬 [COMMENT] Adding comment to task:', taskId);
+      
+      const commentId = `comment-${Date.now()}`;
+      const now = new Date().toISOString();
+      
+      const commentData = {
+        id: commentId,
+        userId: comment.userId,
+        userName: comment.userName,
+        text: comment.text,
+        createdAt: now,
+      };
+
+      // Get current task to retrieve existing threads
+      const taskResponse = await this.getTaskById(taskId);
+      if (!taskResponse.success || !taskResponse.data) {
+        return {
+          success: false,
+          error: 'Task not found',
+        };
+      }
+
+      // Parse existing threads
+      let threads: any[] = [];
+      try {
+        if (taskResponse.data.threads) {
+          threads = typeof taskResponse.data.threads === 'string' 
+            ? JSON.parse(taskResponse.data.threads) 
+            : Array.isArray(taskResponse.data.threads) 
+            ? taskResponse.data.threads 
+            : [];
+        }
+      } catch (e) {
+        console.warn('Failed to parse existing threads:', e);
+        threads = [];
+      }
+
+      // Add new comment
+      threads.push(commentData);
+
+      // Update task with new threads
+      const updateResponse = await this.updateTask(taskId, {
+        threads: JSON.stringify(threads),
+      } as any);
+
+      if (updateResponse.success) {
+        return {
+          success: true,
+          data: commentData,
+        };
+      }
+
+      return updateResponse;
+    } catch (error) {
+      console.error('💬 [COMMENT] Error adding comment:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to add comment',
       };
     }
   }

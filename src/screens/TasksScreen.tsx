@@ -13,10 +13,12 @@ import {
   Modal,
   Image,
   Linking,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { Audio } from 'expo-av';
 import { useAppContext } from '../context/AppContext';
 import { apiService } from '../services/api';
 import CreateTaskForm from '../components/CreateTaskForm';
@@ -24,7 +26,7 @@ import ProfileHeader from '../components/ProfileHeader';
 import { useAuth } from '../context/AuthContext';
 import Sidebar from '../components/Sidebar';
 
-const TasksScreen = () => {
+const TasksScreen = ({ route }: any) => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const [sidebarVisible, setSidebarVisible] = useState(false);
@@ -34,7 +36,21 @@ const TasksScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [showSearchBar, setShowSearchBar] = useState(true);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  
+  // Multi-filter states
+  const [activeFilterCategory, setActiveFilterCategory] = useState<string | null>(null);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string | null>(null);
+  
+  const [teams, setTeams] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [showSubtasksModal, setShowSubtasksModal] = useState(false);
   const [modalSubtasks, setModalSubtasks] = useState<any[]>([]);
   const [modalParentTitle, setModalParentTitle] = useState('');
@@ -49,8 +65,38 @@ const TasksScreen = () => {
   const [loadingParentTask, setLoadingParentTask] = useState(false);
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string>('');
+  const [audioSound, setAudioSound] = useState<Audio.Sound | null>(null);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [currentAudioAttachment, setCurrentAudioAttachment] = useState<any | null>(null);
+  const [newComment, setNewComment] = useState('');
+  const [isAddingComment, setIsAddingComment] = useState(false);
 
-  // Sort tasks by updated date (newest first) and filter by search query and status
+  // Fetch teams, projects, and users for filters
+  useEffect(() => {
+    const fetchFilterData = async () => {
+      try {
+        const [teamsData, projectsData, usersData] = await Promise.all([
+          apiService.getTeams(),
+          apiService.getProjects(),
+          apiService.getUsers()
+        ]);
+        setTeams(Array.isArray(teamsData) ? teamsData : []);
+        setProjects(Array.isArray(projectsData) ? projectsData : []);
+        setUsers(Array.isArray(usersData) ? usersData : []);
+      } catch (error) {
+        console.error('Error fetching filter data:', error);
+      }
+    };
+    fetchFilterData();
+  }, []);
+
+  // Helper function to check if task is overdue
+  const isTaskOverdue = (task: any) => {
+    if (!task.dueDate || task.status === 'completed') return false;
+    return new Date(task.dueDate) < new Date();
+  };
+
+  // Sort tasks and apply all filters
   const filteredTasks = [...state.tasks]
     .filter(task => {
       // Filter by search query
@@ -66,18 +112,77 @@ const TasksScreen = () => {
         if (!matchesSearch) return false;
       }
       
-      // Filter by status
+      // Filter by old selectedStatus (for status pills compatibility)
       if (selectedStatus) {
         return task.status === selectedStatus;
+      }
+
+      // Filter by new multi-select statuses
+      if (selectedStatuses.length > 0) {
+        const taskStatus = task.status || 'todo';
+        if (selectedStatuses.includes('overdue') && isTaskOverdue(task)) {
+          return true;
+        }
+        if (!selectedStatuses.includes(taskStatus) && !selectedStatuses.includes('overdue')) {
+          return false;
+        }
+        if (selectedStatuses.includes('overdue') && !isTaskOverdue(task) && !selectedStatuses.includes(taskStatus)) {
+          return false;
+        }
+      }
+
+      // Filter by priorities
+      if (selectedPriorities.length > 0) {
+        const taskPriority = (task.priority || 'medium').toLowerCase();
+        if (!selectedPriorities.includes(taskPriority)) return false;
+      }
+
+      // Filter by assignees
+      if (selectedAssignees.length > 0) {
+        if (!selectedAssignees.includes(task.assignee)) return false;
+      }
+
+      // Filter by teams
+      if (selectedTeams.length > 0) {
+        const taskTeam = (task as any).teamId || (task as any).team;
+        if (!selectedTeams.includes(taskTeam)) return false;
+      }
+
+      // Filter by projects
+      if (selectedProjects.length > 0) {
+        const taskProject = (task as any).projectId || task.project;
+        if (!selectedProjects.includes(taskProject)) return false;
+      }
+
+      // Filter by date
+      if (selectedDateFilter) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const taskDate = task.dueDate ? new Date(task.dueDate) : null;
+        
+        if (selectedDateFilter === 'today' && taskDate) {
+          taskDate.setHours(0, 0, 0, 0);
+          if (taskDate.getTime() !== today.getTime()) return false;
+        } else if (selectedDateFilter === 'week' && taskDate) {
+          const weekFromNow = new Date(today);
+          weekFromNow.setDate(weekFromNow.getDate() + 7);
+          if (taskDate < today || taskDate > weekFromNow) return false;
+        } else if (selectedDateFilter === 'month' && taskDate) {
+          const monthFromNow = new Date(today);
+          monthFromNow.setMonth(monthFromNow.getMonth() + 1);
+          if (taskDate < today || taskDate > monthFromNow) return false;
+        } else if (selectedDateFilter === 'overdue' && taskDate) {
+          if (taskDate >= today) return false;
+        }
       }
       
       return true;
     })
     .sort((a, b) => {
-      // Sort by updated date (most recently updated first)
-      const dateA = new Date(a.updatedAt || a.createdAt).getTime();
-      const dateB = new Date(b.updatedAt || b.createdAt).getTime();
-      return dateB - dateA; // Newest first
+      // Sort alphabetically by title
+      const titleA = (a.title || '').toLowerCase();
+      const titleB = (b.title || '').toLowerCase();
+      return titleA.localeCompare(titleB);
     });
   
   const tasks = filteredTasks;
@@ -134,6 +239,24 @@ const TasksScreen = () => {
     }
   }, []);
 
+  // Cleanup audio when component unmounts or modal closes
+  useEffect(() => {
+    return () => {
+      if (audioSound) {
+        audioSound.unloadAsync().catch(err => console.log('Error unloading audio:', err));
+      }
+    };
+  }, [audioSound]);
+
+  // Listen for navigation params to open create modal
+  useEffect(() => {
+    if (route?.params?.openCreateModal) {
+      setShowCreateTaskModal(true);
+      // Clear the param to avoid reopening on subsequent navigation
+      navigation.setParams({ openCreateModal: undefined } as any);
+    }
+  }, [route?.params?.openCreateModal]);
+
   // Refresh tasks when screen comes into focus (but not on initial load)
   useFocusEffect(
     useCallback(() => {
@@ -180,11 +303,53 @@ const TasksScreen = () => {
   }, [selectedTaskForDetails?.id, selectedTaskForDetails?.parentId]);
 
   // Handle attachment click
-  const handleAttachmentClick = (attachment: any) => {
+  const handleAttachmentClick = async (attachment: any) => {
+    // Use S3 URL if available, fallback to local URI
+    const fileSource = attachment.url || attachment.uri;
+    
     if (attachment.type === 'image') {
       // Show image viewer
-      setSelectedImage(attachment.uri);
+      setSelectedImage(fileSource);
       setShowImageViewer(true);
+    } else if (attachment.type === 'audio') {
+      // Handle audio playback in-app
+      try {
+        // If already playing this audio, stop it
+        if (currentAudioAttachment?.id === attachment.id && audioSound) {
+          await audioSound.stopAsync();
+          await audioSound.unloadAsync();
+          setAudioSound(null);
+          setIsPlayingAudio(false);
+          setCurrentAudioAttachment(null);
+          return;
+        }
+
+        // If playing a different audio, stop it first
+        if (audioSound) {
+          await audioSound.stopAsync();
+          await audioSound.unloadAsync();
+          setAudioSound(null);
+        }
+
+        // Load and play the new audio
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: fileSource },
+          { shouldPlay: true },
+          (status) => {
+            if (status.isLoaded && status.didJustFinish) {
+              setIsPlayingAudio(false);
+              setCurrentAudioAttachment(null);
+            }
+          }
+        );
+
+        setAudioSound(sound);
+        setIsPlayingAudio(true);
+        setCurrentAudioAttachment(attachment);
+      } catch (error) {
+        console.error('Error playing audio:', error);
+        Alert.alert('Error', 'Failed to play audio file');
+      }
     } else {
       // For other file types, show options
       Alert.alert(
@@ -194,8 +359,8 @@ const TasksScreen = () => {
           {
             text: 'Open',
             onPress: () => {
-              if (attachment.uri) {
-                Linking.openURL(attachment.uri).catch(err => {
+              if (fileSource) {
+                Linking.openURL(fileSource).catch(err => {
                   console.error('Error opening file:', err);
                   Alert.alert('Error', 'Cannot open this file type');
                 });
@@ -279,6 +444,40 @@ const TasksScreen = () => {
     setShowTaskDetailsModal(false);
     setIsEditingTask(false);
     setEditFormData({});
+    setNewComment('');
+  };
+
+  const handleAddComment = async () => {
+    if (!selectedTaskForDetails || !newComment.trim()) {
+      Alert.alert('Error', 'Please enter a comment');
+      return;
+    }
+
+    setIsAddingComment(true);
+    try {
+      const response = await apiService.addCommentToTask(selectedTaskForDetails.id, {
+        userId: user?.id || 'unknown',
+        userName: user?.name || user?.email || 'Anonymous',
+        text: newComment.trim(),
+      });
+
+      if (response.success) {
+        // Refresh task details to show new comment
+        const updatedTaskResponse = await apiService.getTaskById(selectedTaskForDetails.id);
+        if (updatedTaskResponse.success && updatedTaskResponse.data) {
+          setSelectedTaskForDetails(updatedTaskResponse.data);
+          dispatch({ type: 'UPDATE_TASK', payload: updatedTaskResponse.data });
+        }
+        setNewComment('');
+      } else {
+        Alert.alert('Error', response.error || 'Failed to add comment');
+      }
+    } catch (error) {
+      console.error('Error adding comment:', error);
+      Alert.alert('Error', 'Failed to add comment');
+    } finally {
+      setIsAddingComment(false);
+    }
   };
 
   const handleSaveTaskEdit = async () => {
@@ -692,30 +891,20 @@ const TasksScreen = () => {
       }
     };
 
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       {/* Sidebar */}
       <Sidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
 
       {/* Profile Header */}
       <ProfileHeader
         title="My Tasks"
-        rightElement={
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setShowCreateTaskModal(true)}
-          >
-            <Ionicons name="add-circle" size={40} color="#0ea5e9" />
-          </TouchableOpacity>
-        }
         onMenuPress={() => setSidebarVisible(true)}
         onProfilePress={() => {
           // Handle profile navigation
-        }}
-        onRightElementPress={() => {
-          setShowCreateTaskModal(true);
         }}
         onNotificationsPress={() => (navigation as any).navigate('Notifications')}
       />
@@ -724,30 +913,26 @@ const TasksScreen = () => {
         {/* Search Bar and Icons */}
         <View style={[styles.searchContainer, styles.searchContainerWithBar]}>
           {showSearchBar && (
-            <View style={styles.searchBarWrapper}>
-              <View style={[styles.searchBar, styles.searchBarActive]}>
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search tasks..."
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  placeholderTextColor="#9ca3af"
-                  autoFocus={true}
-                />
-              </View>
+            <View style={[styles.searchBar, isSearchFocused && styles.searchBarFocused]}>
+              <Ionicons name="search-outline" size={18} color="#9ca3af" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search tasks..."
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholderTextColor="#9ca3af"
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setIsSearchFocused(false)}
+              />
             </View>
           )}
           
           <View style={styles.iconsContainer}>
-            <View style={styles.searchIconButton}>
-              <Ionicons name="search-outline" size={20} color="#137fec" />
-            </View>
-            
             <TouchableOpacity 
               style={styles.filterIcon}
               onPress={() => setShowFilters(!showFilters)}
             >
-              <Ionicons name="filter-outline" size={20} color="#6b7280" />
+              <Ionicons name="filter-outline" size={18} color="#6b7280" />
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -756,137 +941,406 @@ const TasksScreen = () => {
             >
               <Ionicons 
                 name={viewMode === 'list' ? 'apps-outline' : 'list-outline'} 
-                size={20} 
+                size={18} 
                 color="#6b7280" 
               />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Filter Dropdown Menu */}
+        {/* Compact Filter Categories Bar */}
         {showFilters && (
-          <View style={styles.filterDropdown}>
-            <View style={styles.filterDropdownContent}>
-              <View style={styles.filterDropdownHeader}>
-                <Text style={styles.filterDropdownTitle}>Filter by Status</Text>
-                <TouchableOpacity
-                  style={styles.filterCloseButton}
-                  onPress={() => setShowFilters(false)}
-                >
-                  <Ionicons name="close" size={18} color="#6b7280" />
-                </TouchableOpacity>
-              </View>
-              
-              <TouchableOpacity
-                style={[
-                  styles.filterDropdownItem,
-                  !selectedStatus && styles.filterDropdownItemActive
-                ]}
-                onPress={() => {
-                  setSelectedStatus(null);
-                  setShowFilters(false);
-                }}
-              >
-                <View style={[styles.filterStatusDot, { backgroundColor: '#6b7280' }]} />
-                <Text style={[
-                  styles.filterDropdownText,
-                  !selectedStatus && styles.filterDropdownTextActive
-                ]}>
-                  All Tasks
-                </Text>
-              </TouchableOpacity>
-              
+          <View style={styles.filterCategoriesBar}>
+            <ScrollView 
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterCategoriesContent}
+            >
               {[
-                { status: 'To Do', color: '#6b7280' },
-                { status: 'In Progress', color: '#f59e0b' },
-                { status: 'Completed', color: '#10b981' },
-                { status: 'Overdue', color: '#ef4444' }
-              ].map((statusItem) => (
+                { key: 'status', label: 'Status', icon: 'checkmark-circle-outline' },
+                { key: 'priority', label: 'Priority', icon: 'flag-outline' },
+                { key: 'assignee', label: 'Assigned To', icon: 'person-outline' },
+                { key: 'team', label: 'Team', icon: 'people-outline' },
+                { key: 'project', label: 'Project', icon: 'briefcase-outline' },
+                { key: 'date', label: 'Date', icon: 'calendar-outline' }
+              ].map((category) => (
                 <TouchableOpacity
-                  key={statusItem.status}
+                  key={category.key}
                   style={[
-                    styles.filterDropdownItem,
-                    selectedStatus === statusItem.status && styles.filterDropdownItemActive
+                    styles.filterCategoryChip,
+                    activeFilterCategory === category.key && styles.filterCategoryChipActive
                   ]}
-                  onPress={() => {
-                    setSelectedStatus(statusItem.status);
-                    setShowFilters(false);
-                  }}
+                  onPress={() => setActiveFilterCategory(activeFilterCategory === category.key ? null : category.key)}
                 >
-                  <View style={[styles.filterStatusDot, { backgroundColor: statusItem.color }]} />
+                  <Ionicons name={category.icon as any} size={14} color={activeFilterCategory === category.key ? '#137fec' : '#6b7280'} />
                   <Text style={[
-                    styles.filterDropdownText,
-                    selectedStatus === statusItem.status && styles.filterDropdownTextActive
+                    styles.filterCategoryChipText,
+                    activeFilterCategory === category.key && styles.filterCategoryChipTextActive
                   ]}>
-                    {statusItem.status}
+                    {category.label}
                   </Text>
                 </TouchableOpacity>
               ))}
-            </View>
+              
+              {/* Clear All */}
+              {(selectedStatuses.length > 0 || selectedPriorities.length > 0 || 
+                selectedAssignees.length > 0 || selectedTeams.length > 0 || 
+                selectedProjects.length > 0 || selectedDateFilter) && (
+                <TouchableOpacity
+                  style={styles.filterClearAllChip}
+                  onPress={() => {
+                    setSelectedStatuses([]);
+                    setSelectedPriorities([]);
+                    setSelectedAssignees([]);
+                    setSelectedTeams([]);
+                    setSelectedProjects([]);
+                    setSelectedDateFilter(null);
+                    setActiveFilterCategory(null);
+                  }}
+                >
+                  <Ionicons name="close-circle" size={14} color="#ef4444" />
+                  <Text style={styles.filterClearAllChipText}>Clear All</Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
           </View>
         )}
 
-        {/* Status Filter Pills */}
-        <View style={styles.statusPillsContainer}>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.statusPillsContent}
-          >
-            <TouchableOpacity
-              style={[
-                styles.statusPill,
-                !selectedStatus && styles.statusPillActive,
-                !selectedStatus && styles.statusPillAll
-              ]}
-              onPress={() => setSelectedStatus(null)}
+        {/* Active Filters Display */}
+        {(selectedStatuses.length > 0 || selectedPriorities.length > 0 || 
+          selectedAssignees.length > 0 || selectedTeams.length > 0 || 
+          selectedProjects.length > 0 || selectedDateFilter) && (
+          <View style={styles.activeFiltersContainer}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.activeFiltersContent}
             >
-              <Text style={[
-                styles.statusPillNumber,
-                !selectedStatus && styles.statusPillNumberActive
-              ]}>
-                {state.tasks.length}
-              </Text>
-              <Text style={[
-                styles.statusPillText,
-                !selectedStatus && styles.statusPillTextActive
-              ]}>
-                All
-              </Text>
-            </TouchableOpacity>
-            
-            {[
-              { status: 'To Do', color: '#6b7280', bgColor: '#f3f4f6' },
-              { status: 'In Progress', color: '#f59e0b', bgColor: '#fef3c7' },
-              { status: 'Completed', color: '#10b981', bgColor: '#dcfce7' },
-              { status: 'Overdue', color: '#ef4444', bgColor: '#fee2e2' }
-            ].map((statusItem) => (
-              <TouchableOpacity
-                key={statusItem.status}
-                style={[
-                  styles.statusPill,
-                  selectedStatus === statusItem.status && styles.statusPillActive,
-                  { backgroundColor: selectedStatus === statusItem.status ? statusItem.bgColor : '#f9fafb' }
-                ]}
-                onPress={() => setSelectedStatus(selectedStatus === statusItem.status ? null : statusItem.status)}
-              >
-                <Text style={[
-                  styles.statusPillNumber,
-                  { color: statusItem.color }
-                ]}>
-                  {getTaskCountByStatus(statusItem.status)}
-                </Text>
-                <Text style={[
-                  styles.statusPillText,
-                  selectedStatus === statusItem.status && styles.statusPillTextActive,
-                  { color: selectedStatus === statusItem.status ? statusItem.color : '#6b7280' }
-                ]}>
-                  {statusItem.status}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+              {/* Status filters */}
+              {selectedStatuses.map((status) => (
+                <View key={`status-${status}`} style={styles.activeFilterPill}>
+                  <Text style={styles.activeFilterPillText}>
+                    Status: {status.charAt(0).toUpperCase() + status.slice(1)}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setSelectedStatuses(prev => prev.filter(s => s !== status))}
+                  >
+                    <Ionicons name="close-circle" size={18} color="#6b7280" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              
+              {/* Priority filters */}
+              {selectedPriorities.map((priority) => (
+                <View key={`priority-${priority}`} style={styles.activeFilterPill}>
+                  <Text style={styles.activeFilterPillText}>
+                    Priority: {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setSelectedPriorities(prev => prev.filter(p => p !== priority))}
+                  >
+                    <Ionicons name="close-circle" size={18} color="#6b7280" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              
+              {/* Assignee filters */}
+              {selectedAssignees.map((assigneeId) => {
+                const user = users.find(u => u.id === assigneeId);
+                return (
+                  <View key={`assignee-${assigneeId}`} style={styles.activeFilterPill}>
+                    <Text style={styles.activeFilterPillText}>
+                      Assignee: {user?.name || user?.email || assigneeId}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setSelectedAssignees(prev => prev.filter(a => a !== assigneeId))}
+                    >
+                      <Ionicons name="close-circle" size={18} color="#6b7280" />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+              
+              {/* Team filters */}
+              {selectedTeams.map((teamId) => {
+                const team = teams.find(t => t.id === teamId);
+                return (
+                  <View key={`team-${teamId}`} style={styles.activeFilterPill}>
+                    <Text style={styles.activeFilterPillText}>
+                      Team: {team?.name || teamId}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setSelectedTeams(prev => prev.filter(t => t !== teamId))}
+                    >
+                      <Ionicons name="close-circle" size={18} color="#6b7280" />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+              
+              {/* Project filters */}
+              {selectedProjects.map((projectId) => {
+                const project = projects.find(p => p.id === projectId);
+                return (
+                  <View key={`project-${projectId}`} style={styles.activeFilterPill}>
+                    <Text style={styles.activeFilterPillText}>
+                      Project: {project?.name || projectId}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setSelectedProjects(prev => prev.filter(p => p !== projectId))}
+                    >
+                      <Ionicons name="close-circle" size={18} color="#6b7280" />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+              
+              {/* Date filter */}
+              {selectedDateFilter && (
+                <View style={styles.activeFilterPill}>
+                  <Text style={styles.activeFilterPillText}>
+                    Date: {selectedDateFilter === 'today' ? 'Today' : 
+                           selectedDateFilter === 'week' ? 'This Week' :
+                           selectedDateFilter === 'month' ? 'This Month' : 'Overdue'}
+                  </Text>
+                  <TouchableOpacity onPress={() => setSelectedDateFilter(null)}>
+                    <Ionicons name="close-circle" size={18} color="#6b7280" />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Dynamic Filter Pills Section */}
+        {activeFilterCategory && (
+          <View style={styles.dynamicPillsContainer}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.dynamicPillsContent}
+            >
+              {/* Status Pills */}
+              {activeFilterCategory === 'status' && (
+                <>
+                  {['all', 'todo', 'in progress', 'completed', 'overdue'].map((status) => (
+                    <TouchableOpacity
+                      key={status}
+                      style={[
+                        styles.dynamicPill,
+                        (status === 'all' ? selectedStatuses.length === 0 : selectedStatuses.includes(status)) && styles.dynamicPillActive
+                      ]}
+                      onPress={() => {
+                        if (status === 'all') {
+                          setSelectedStatuses([]);
+                        } else {
+                          setSelectedStatuses(prev => 
+                            prev.includes(status) 
+                              ? prev.filter(s => s !== status)
+                              : [...prev, status]
+                          );
+                        }
+                      }}
+                    >
+                      <Text style={[
+                        styles.dynamicPillText,
+                        (status === 'all' ? selectedStatuses.length === 0 : selectedStatuses.includes(status)) && styles.dynamicPillTextActive
+                      ]}>
+                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
+
+              {/* Priority Pills */}
+              {activeFilterCategory === 'priority' && (
+                <>
+                  {['low', 'medium', 'high'].map((priority) => (
+                    <TouchableOpacity
+                      key={priority}
+                      style={[
+                        styles.dynamicPill,
+                        selectedPriorities.includes(priority) && styles.dynamicPillActive
+                      ]}
+                      onPress={() => {
+                        setSelectedPriorities(prev => 
+                          prev.includes(priority)
+                            ? prev.filter(p => p !== priority)
+                            : [...prev, priority]
+                        );
+                      }}
+                    >
+                      <Text style={[
+                        styles.dynamicPillText,
+                        selectedPriorities.includes(priority) && styles.dynamicPillTextActive
+                      ]}>
+                        {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
+
+              {/* Date Pills */}
+              {activeFilterCategory === 'date' && (
+                <>
+                  {[
+                    { key: 'today', label: 'Today' },
+                    { key: 'week', label: 'This Week' },
+                    { key: 'month', label: 'This Month' },
+                    { key: 'overdue', label: 'Overdue' }
+                  ].map((dateOption) => (
+                    <TouchableOpacity
+                      key={dateOption.key}
+                      style={[
+                        styles.dynamicPill,
+                        selectedDateFilter === dateOption.key && styles.dynamicPillActive
+                      ]}
+                      onPress={() => {
+                        setSelectedDateFilter(
+                          selectedDateFilter === dateOption.key ? null : dateOption.key
+                        );
+                      }}
+                    >
+                      <Text style={[
+                        styles.dynamicPillText,
+                        selectedDateFilter === dateOption.key && styles.dynamicPillTextActive
+                      ]}>
+                        {dateOption.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
+
+            </ScrollView>
+          </View>
+        )}
+
+        {/* List Views for Assignee, Team, Project */}
+        {activeFilterCategory && ['assignee', 'team', 'project'].includes(activeFilterCategory) && (
+          <View style={styles.filterListView}>
+            <ScrollView style={styles.filterListScrollView}>
+              {/* Assignee List */}
+              {activeFilterCategory === 'assignee' && users.length > 0 && (
+                <>
+                  {users.map((user) => (
+                    <TouchableOpacity
+                      key={user.id}
+                      style={[
+                        styles.filterListRow,
+                        selectedAssignees.includes(user.id) && styles.filterListRowActive
+                      ]}
+                      onPress={() => {
+                        setSelectedAssignees(prev =>
+                          prev.includes(user.id)
+                            ? prev.filter(a => a !== user.id)
+                            : [...prev, user.id]
+                        );
+                      }}
+                    >
+                      <View style={styles.filterListRowLeft}>
+                        <View style={styles.filterListAvatar}>
+                          <Text style={styles.filterListAvatarText}>
+                            {(user.name?.charAt(0) || user.email?.charAt(0) || '?').toUpperCase()}
+                          </Text>
+                        </View>
+                        <View>
+                          <Text style={styles.filterListRowTitle}>{user.name || 'Unnamed User'}</Text>
+                          {user.email && (
+                            <Text style={styles.filterListRowSubtitle}>{user.email}</Text>
+                          )}
+                        </View>
+                      </View>
+                      {selectedAssignees.includes(user.id) && (
+                        <Ionicons name="checkmark-circle" size={22} color="#137fec" />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
+
+              {/* Team List */}
+              {activeFilterCategory === 'team' && teams.length > 0 && (
+                <>
+                  {teams.map((team) => (
+                    <TouchableOpacity
+                      key={team.id}
+                      style={[
+                        styles.filterListRow,
+                        selectedTeams.includes(team.id) && styles.filterListRowActive
+                      ]}
+                      onPress={() => {
+                        setSelectedTeams(prev =>
+                          prev.includes(team.id)
+                            ? prev.filter(t => t !== team.id)
+                            : [...prev, team.id]
+                        );
+                      }}
+                    >
+                      <View style={styles.filterListRowLeft}>
+                        <View style={[styles.filterListAvatar, { backgroundColor: '#dbeafe' }]}>
+                          <Ionicons name="people" size={16} color="#137fec" />
+                        </View>
+                        <View>
+                          <Text style={styles.filterListRowTitle}>{team.name}</Text>
+                          {team.members && (
+                            <Text style={styles.filterListRowSubtitle}>
+                              {team.members.length} member{team.members.length !== 1 ? 's' : ''}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                      {selectedTeams.includes(team.id) && (
+                        <Ionicons name="checkmark-circle" size={22} color="#137fec" />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
+
+              {/* Project List */}
+              {activeFilterCategory === 'project' && projects.length > 0 && (
+                <>
+                  {projects.map((project) => (
+                    <TouchableOpacity
+                      key={project.id}
+                      style={[
+                        styles.filterListRow,
+                        selectedProjects.includes(project.id) && styles.filterListRowActive
+                      ]}
+                      onPress={() => {
+                        setSelectedProjects(prev =>
+                          prev.includes(project.id)
+                            ? prev.filter(p => p !== project.id)
+                            : [...prev, project.id]
+                        );
+                      }}
+                    >
+                      <View style={styles.filterListRowLeft}>
+                        <View style={[styles.filterListAvatar, { backgroundColor: '#dcfce7' }]}>
+                          <Ionicons name="briefcase" size={16} color="#10b981" />
+                        </View>
+                        <View>
+                          <Text style={styles.filterListRowTitle}>{project.name}</Text>
+                          {project.status && (
+                            <Text style={styles.filterListRowSubtitle}>
+                              {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                      {selectedProjects.includes(project.id) && (
+                        <Ionicons name="checkmark-circle" size={22} color="#137fec" />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Task List/Grid */}
         {isLoading && tasks.length === 0 ? (
@@ -1288,42 +1742,60 @@ const TasksScreen = () => {
                             <View style={styles.taskDetailsAttachmentsSection}>
                               <Text style={styles.taskDetailsSectionTitle}>Attachments ({attachmentsList.length})</Text>
                               <View style={styles.taskDetailsAttachmentsList}>
-                                {attachmentsList.map((attachment: any) => (
-                                  <TouchableOpacity 
-                                    key={attachment.id} 
-                                    style={styles.taskDetailsAttachmentItem}
-                                    onPress={() => handleAttachmentClick(attachment)}
-                                    activeOpacity={0.7}
-                                  >
-                                    {attachment.type === 'image' && attachment.uri ? (
-                                      <Image 
-                                        source={{ uri: attachment.uri }} 
-                                        style={styles.taskDetailsAttachmentThumbnail} 
-                                      />
-                                    ) : (
-                                      <View style={styles.taskDetailsAttachmentIcon}>
-                                        <Ionicons 
-                                          name={getAttachmentIcon(attachment.type) as any} 
-                                          size={24} 
-                                          color="#3b82f6" 
+                                {attachmentsList.map((attachment: any) => {
+                                  const isThisAudioPlaying = attachment.type === 'audio' && 
+                                                              currentAudioAttachment?.id === attachment.id && 
+                                                              isPlayingAudio;
+                                  
+                                  return (
+                                    <TouchableOpacity 
+                                      key={attachment.id} 
+                                      style={[
+                                        styles.taskDetailsAttachmentItem,
+                                        isThisAudioPlaying && styles.taskDetailsAttachmentItemPlaying
+                                      ]}
+                                      onPress={() => handleAttachmentClick(attachment)}
+                                      activeOpacity={0.7}
+                                    >
+                                      {attachment.type === 'image' && (attachment.url || attachment.uri) ? (
+                                        <Image 
+                                          source={{ uri: attachment.url || attachment.uri }} 
+                                          style={styles.taskDetailsAttachmentThumbnail} 
                                         />
+                                      ) : (
+                                        <View style={[
+                                          styles.taskDetailsAttachmentIcon,
+                                          isThisAudioPlaying && styles.taskDetailsAttachmentIconPlaying
+                                        ]}>
+                                          <Ionicons 
+                                            name={getAttachmentIcon(attachment.type) as any} 
+                                            size={24} 
+                                            color={isThisAudioPlaying ? '#8b5cf6' : '#3b82f6'} 
+                                          />
+                                        </View>
+                                      )}
+                                      <View style={styles.taskDetailsAttachmentInfo}>
+                                        <Text style={styles.taskDetailsAttachmentName} numberOfLines={1}>
+                                          {attachment.name}
+                                        </Text>
+                                        <Text style={styles.taskDetailsAttachmentMeta}>
+                                          {attachment.duration ? `${Math.floor(attachment.duration / 60)}:${(attachment.duration % 60).toString().padStart(2, '0')} • ` : ''}
+                                          {formatAttachmentSize(attachment.size)} • {attachment.type}
+                                          {isThisAudioPlaying && ' • Playing...'}
+                                        </Text>
                                       </View>
-                                    )}
-                                    <View style={styles.taskDetailsAttachmentInfo}>
-                                      <Text style={styles.taskDetailsAttachmentName} numberOfLines={1}>
-                                        {attachment.name}
-                                      </Text>
-                                      <Text style={styles.taskDetailsAttachmentMeta}>
-                                        {formatAttachmentSize(attachment.size)} • {attachment.type}
-                                      </Text>
-                                    </View>
-                                    <Ionicons 
-                                      name={attachment.type === 'image' ? 'eye-outline' : 'open-outline'} 
-                                      size={20} 
-                                      color="#3b82f6" 
-                                    />
-                                  </TouchableOpacity>
-                                ))}
+                                      <Ionicons 
+                                        name={
+                                          attachment.type === 'image' ? 'eye-outline' : 
+                                          attachment.type === 'audio' ? (isThisAudioPlaying ? 'stop-circle' : 'play-circle') :
+                                          'open-outline'
+                                        } 
+                                        size={20} 
+                                        color={isThisAudioPlaying ? '#8b5cf6' : '#3b82f6'} 
+                                      />
+                                    </TouchableOpacity>
+                                  );
+                                })}
                               </View>
                             </View>
                           );
@@ -1333,6 +1805,80 @@ const TasksScreen = () => {
                       }
                       return null;
                     })()}
+
+                    {/* Threads/Comments Section */}
+                    <View style={styles.taskDetailsThreadsSection}>
+                      <Text style={styles.taskDetailsSectionTitle}>
+                        Threads ({selectedTaskForDetails?.threads ? (JSON.parse(selectedTaskForDetails.threads).length || 0) : 0})
+                      </Text>
+                      
+                      {/* Comments List */}
+                      {(() => {
+                        try {
+                          const threads = selectedTaskForDetails?.threads 
+                            ? JSON.parse(selectedTaskForDetails.threads) 
+                            : [];
+                          
+                          return (
+                            <View style={styles.threadsList}>
+                              {threads.length === 0 ? (
+                                <Text style={styles.noThreadsText}>No comments yet. Be the first to comment!</Text>
+                              ) : (
+                                threads.map((comment: any) => (
+                                  <View key={comment.id} style={styles.threadItem}>
+                                    <View style={styles.threadAvatar}>
+                                      <Ionicons name="person" size={16} color="#3b82f6" />
+                                    </View>
+                                    <View style={styles.threadContent}>
+                                      <View style={styles.threadHeader}>
+                                        <Text style={styles.threadUserName}>{comment.userName}</Text>
+                                        <Text style={styles.threadTime}>
+                                          {new Date(comment.createdAt).toLocaleDateString('en-US', { 
+                                            month: 'short', 
+                                            day: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                          })}
+                                        </Text>
+                                      </View>
+                                      <Text style={styles.threadText}>{comment.text}</Text>
+                                    </View>
+                                  </View>
+                                ))
+                              )}
+                            </View>
+                          );
+                        } catch (e) {
+                          return <Text style={styles.noThreadsText}>Error loading comments</Text>;
+                        }
+                      })()}
+                      
+                      {/* Add Comment Input */}
+                      <View style={styles.addCommentSection}>
+                        <View style={styles.commentInputWrapper}>
+                          <TextInput
+                            style={styles.commentInput}
+                            placeholder="Add a comment..."
+                            placeholderTextColor="#9ca3af"
+                            value={newComment}
+                            onChangeText={setNewComment}
+                            multiline
+                            maxLength={500}
+                          />
+                          <TouchableOpacity
+                            style={styles.sendCommentButton}
+                            onPress={handleAddComment}
+                            disabled={isAddingComment || !newComment.trim()}
+                          >
+                            {isAddingComment ? (
+                              <ActivityIndicator size="small" color="#3b82f6" />
+                            ) : (
+                              <Ionicons name="send" size={20} color={newComment.trim() ? '#3b82f6' : '#d1d5db'} />
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
                   </View>
                 </ScrollView>
               )}
@@ -1431,7 +1977,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f1f5f9',
-    paddingBottom: 80, // Add space for bottom tab bar (now positioned within safe area)
+    paddingBottom: 45, // Add space for bottom tab bar
   },
   header: {
     backgroundColor: '#f1f5f9  ',
@@ -1459,6 +2005,22 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  addTaskButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#137fec',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#137fec',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   taskList: {
     flex: 1,
@@ -2558,58 +3120,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f9fafb',
-    borderRadius: 6,
-    borderWidth: 0,
-    borderColor: 'transparent',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    height: 32,
-    marginRight: 12,
-  },
-  searchBarWrapper: {
-    flex: 1,
-    marginRight: 12,
     borderRadius: 8,
-    padding: 2,
-    backgroundColor: '#137fec',
-    shadowColor: '#137fec',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    height: 36,
+    marginRight: 12,
   },
-  searchBarActive: {
-    borderWidth: 0,
-    borderColor: 'transparent',
-    marginRight: 0,
+  searchBarFocused: {
+    backgroundColor: '#ffffff',
+    borderColor: '#1e40af',
+    borderWidth: 1.5,
+  },
+  searchIcon: {
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: '#1f2937',
+    color: '#111827',
     paddingVertical: 0,
     height: 20,
-    borderWidth: 0,
-    borderColor: 'transparent',
   },
   iconsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  searchIconButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    height: 36,
-    width: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   filterIcon: {
     padding: 8,
@@ -2697,6 +3234,138 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   // Filter Dropdown Styles
+  filterCategoriesBar: {
+    backgroundColor: '#ffffff',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  filterCategoriesContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  filterCategoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    gap: 4,
+  },
+  filterCategoryChipActive: {
+    backgroundColor: '#dbeafe',
+    borderColor: '#137fec',
+  },
+  filterCategoryChipText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  filterCategoryChipTextActive: {
+    color: '#137fec',
+    fontWeight: '600',
+  },
+  filterClearAllChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#fee2e2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    gap: 4,
+  },
+  filterClearAllChipText: {
+    fontSize: 12,
+    color: '#ef4444',
+    fontWeight: '600',
+  },
+  dynamicPillsContainer: {
+    backgroundColor: '#f8fafc',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  dynamicPillsContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  dynamicPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  dynamicPillActive: {
+    backgroundColor: '#dbeafe',
+    borderColor: '#137fec',
+    borderWidth: 1.5,
+  },
+  dynamicPillText: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  dynamicPillTextActive: {
+    color: '#137fec',
+    fontWeight: '600',
+  },
+  filterListView: {
+    backgroundColor: '#ffffff',
+    maxHeight: 300,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  filterListScrollView: {
+    maxHeight: 300,
+  },
+  filterListRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  filterListRowActive: {
+    backgroundColor: '#f0f9ff',
+  },
+  filterListRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  filterListAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#e5e7eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterListAvatarText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  filterListRowTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1f2937',
+  },
+  filterListRowSubtitle: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2,
+  },
   filterDropdown: {
     position: 'absolute',
     top: 48,
@@ -2846,6 +3515,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  taskDetailsAttachmentItemPlaying: {
+    backgroundColor: '#f5f3ff',
+    borderColor: '#8b5cf6',
+    borderWidth: 2,
+  },
+  taskDetailsAttachmentIconPlaying: {
+    backgroundColor: '#ede9fe',
+  },
   taskDetailsAttachmentInfo: {
     flex: 1,
   },
@@ -2865,6 +3542,90 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#e5e7eb',
   },
+  // Threads/Comments styles
+  taskDetailsThreadsSection: {
+    marginBottom: 24,
+  },
+  threadsList: {
+    gap: 12,
+    marginBottom: 16,
+  },
+  noThreadsText: {
+    fontSize: 14,
+    color: '#9ca3af',
+    textAlign: 'center',
+    paddingVertical: 20,
+    fontStyle: 'italic',
+  },
+  threadItem: {
+    flexDirection: 'row',
+    gap: 10,
+    backgroundColor: '#f9fafb',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  threadAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#eff6ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  threadContent: {
+    flex: 1,
+  },
+  threadHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  threadUserName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  threadTime: {
+    fontSize: 11,
+    color: '#9ca3af',
+  },
+  threadText: {
+    fontSize: 14,
+    color: '#4b5563',
+    lineHeight: 20,
+  },
+  addCommentSection: {
+    marginTop: 12,
+  },
+  commentInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 8,
+    gap: 8,
+  },
+  commentInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1f2937',
+    maxHeight: 100,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  sendCommentButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#eff6ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   // Image Viewer styles
   imageViewerBackdrop: {
     flex: 1,
@@ -2882,6 +3643,85 @@ const styles = StyleSheet.create({
   imageViewerImage: {
     width: '100%',
     height: '100%',
+  },
+  // Compact Filter Styles
+  filterSection: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  filterSectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  compactPillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  compactFilterPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  compactFilterPillActive: {
+    backgroundColor: '#dbeafe',
+    borderColor: '#137fec',
+  },
+  compactPillText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  compactPillTextActive: {
+    color: '#137fec',
+    fontWeight: '600',
+  },
+  compactClearButton: {
+    marginVertical: 8,
+    marginHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#fee2e2',
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  compactClearText: {
+    fontSize: 12,
+    color: '#ef4444',
+    fontWeight: '600',
+  },
+  activeFiltersContainer: {
+    backgroundColor: '#ffffff',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  activeFiltersContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  activeFilterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: '#dbeafe',
+    borderRadius: 16,
+    gap: 6,
+  },
+  activeFilterPillText: {
+    fontSize: 13,
+    color: '#1e40af',
+    fontWeight: '500',
   },
 });
 
