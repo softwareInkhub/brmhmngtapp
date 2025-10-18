@@ -651,8 +651,6 @@ const TasksScreen = ({ route }: any) => {
           }}
           activeOpacity={0.8}
         >
-          {/* Priority Indicator Bar */}
-          <View style={[styles.priorityBar, { backgroundColor: getPriorityColor(item.priority || 'Medium') }]} />
           
           <View style={styles.taskCardContent}>
             {/* Header Row */}
@@ -660,8 +658,8 @@ const TasksScreen = ({ route }: any) => {
               <View style={styles.taskCardHeaderLeft}>
                 <View style={[styles.taskIconNew, { backgroundColor: getStatusColor(item.status).bg }]}> 
                   <Ionicons name="clipboard" size={18} color={getStatusColor(item.status).text} />
-                </View>
-                <View style={{ flex: 1 }}>
+            </View>
+            <View style={{ flex: 1 }}>
                   <Text style={styles.taskCardTitleNew} numberOfLines={2}>{item.title || 'No Title'}</Text>
                   
                   {/* Date, Status, and Time - All in one line under title */}
@@ -672,7 +670,7 @@ const TasksScreen = ({ route }: any) => {
                         <Ionicons name="calendar-outline" size={10} color={isOverdue ? '#ef4444' : '#6b7280'} />
                         <Text style={[styles.dueDateBadgeText, isOverdue && styles.dueDateBadgeTextOverdue]}>
                           {new Date(item.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </Text>
+              </Text>
                       </View>
                     )}
                     
@@ -734,23 +732,23 @@ const TasksScreen = ({ route }: any) => {
                 )}
                 
                 {/* Parent Task Badge - if this is a subtask */}
-                {item.parentId && (
-                  <View style={styles.parentTaskBadge}>
+              {item.parentId && (
+                <View style={styles.parentTaskBadge}>
                     <Ionicons name="git-branch-outline" size={11} color="#0277bd" />
-                    <Text style={styles.parentTaskBadgeText} numberOfLines={1}>
-                      Subtask of: {state.tasks.find(t => t.id === item.parentId)?.title || item.parentId}
-                    </Text>
-                  </View>
-                )}
+                  <Text style={styles.parentTaskBadgeText} numberOfLines={1}>
+                    Subtask of: {state.tasks.find(t => t.id === item.parentId)?.title || item.parentId}
+                  </Text>
+                </View>
+              )}
                 
                 {/* Subtasks Badge - if this task has subtasks */}
                 {hasSubtasks && (
-                  <TouchableOpacity style={styles.subtaskBadge} onPress={() => openSubtasksModal(item)}>
+                <TouchableOpacity style={styles.subtaskBadge} onPress={() => openSubtasksModal(item)}>
                     <Ionicons name="list" size={11} color="#d97706" />
-                    <Text style={styles.subtaskBadgeText}>{getSubtaskCount(item)} Subtask{getSubtaskCount(item) > 1 ? 's' : ''}</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+                  <Text style={styles.subtaskBadgeText}>{getSubtaskCount(item)} Subtask{getSubtaskCount(item) > 1 ? 's' : ''}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
             )}
           </View>
         </TouchableOpacity>
@@ -775,8 +773,6 @@ const TasksScreen = ({ route }: any) => {
           }}
           activeOpacity={0.8}
         >
-          {/* Priority Bar */}
-          <View style={[styles.gridPriorityBar, { backgroundColor: getPriorityColor(item.priority || 'Medium') }]} />
           
           {/* Header with Status Icon */}
           <View style={styles.gridTaskHeader}>
@@ -831,20 +827,20 @@ const TasksScreen = ({ route }: any) => {
           <View style={styles.gridTaskFooter}>
             <View style={[styles.gridStatusBadge, { backgroundColor: getStatusColor(item.status).bg }]}>
               <Text style={[styles.gridStatusText, { color: getStatusColor(item.status).text }]}>
-                {getStatusText(item.status)}
-              </Text>
+                  {getStatusText(item.status)}
+                </Text>
             </View>
             
             {item.dueDate && (
               <View style={[styles.gridDueDateBadge, isOverdue && styles.gridDueDateBadgeOverdue]}>
                 <Ionicons name="calendar-outline" size={9} color={isOverdue ? '#ef4444' : '#6b7280'} />
                 <Text style={[styles.gridDueDateText, isOverdue && styles.gridDueDateOverdue]}>
-                  {new Date(item.dueDate).toLocaleDateString('en-US', { 
-                    month: 'short', 
-                    day: 'numeric' 
-                  })}
-                </Text>
-              </View>
+                {new Date(item.dueDate).toLocaleDateString('en-US', { 
+                  month: 'short', 
+                  day: 'numeric' 
+                })}
+              </Text>
+            </View>
             )}
           </View>
 
@@ -915,15 +911,15 @@ const TasksScreen = ({ route }: any) => {
           {showSearchBar && (
             <View style={[styles.searchBar, isSearchFocused && styles.searchBarFocused]}>
               <Ionicons name="search-outline" size={18} color="#9ca3af" style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search tasks..."
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholderTextColor="#9ca3af"
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search tasks..."
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholderTextColor="#9ca3af"
                 onFocus={() => setIsSearchFocused(true)}
                 onBlur={() => setIsSearchFocused(false)}
-              />
+                />
             </View>
           )}
           
@@ -964,22 +960,22 @@ const TasksScreen = ({ route }: any) => {
                 { key: 'project', label: 'Project', icon: 'briefcase-outline' },
                 { key: 'date', label: 'Date', icon: 'calendar-outline' }
               ].map((category) => (
-                <TouchableOpacity
+              <TouchableOpacity
                   key={category.key}
-                  style={[
+                style={[
                     styles.filterCategoryChip,
                     activeFilterCategory === category.key && styles.filterCategoryChipActive
-                  ]}
+                ]}
                   onPress={() => setActiveFilterCategory(activeFilterCategory === category.key ? null : category.key)}
-                >
+              >
                   <Ionicons name={category.icon as any} size={14} color={activeFilterCategory === category.key ? '#137fec' : '#6b7280'} />
-                  <Text style={[
+                <Text style={[
                     styles.filterCategoryChipText,
                     activeFilterCategory === category.key && styles.filterCategoryChipTextActive
-                  ]}>
+                ]}>
                     {category.label}
-                  </Text>
-                </TouchableOpacity>
+                </Text>
+              </TouchableOpacity>
               ))}
               
               {/* Clear All */}
@@ -1026,7 +1022,7 @@ const TasksScreen = ({ route }: any) => {
                     onPress={() => setSelectedStatuses(prev => prev.filter(s => s !== status))}
                   >
                     <Ionicons name="close-circle" size={18} color="#6b7280" />
-                  </TouchableOpacity>
+                </TouchableOpacity>
                 </View>
               ))}
               
@@ -1041,7 +1037,7 @@ const TasksScreen = ({ route }: any) => {
                   >
                     <Ionicons name="close-circle" size={18} color="#6b7280" />
                   </TouchableOpacity>
-                </View>
+            </View>
               ))}
               
               {/* Assignee filters */}
@@ -1115,18 +1111,18 @@ const TasksScreen = ({ route }: any) => {
         {/* Dynamic Filter Pills Section */}
         {activeFilterCategory && (
           <View style={styles.dynamicPillsContainer}>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.dynamicPillsContent}
-            >
+          >
               {/* Status Pills */}
               {activeFilterCategory === 'status' && (
                 <>
                   {['all', 'todo', 'in progress', 'completed', 'overdue'].map((status) => (
-                    <TouchableOpacity
+            <TouchableOpacity
                       key={status}
-                      style={[
+              style={[
                         styles.dynamicPill,
                         (status === 'all' ? selectedStatuses.length === 0 : selectedStatuses.includes(status)) && styles.dynamicPillActive
                       ]}
@@ -1141,13 +1137,13 @@ const TasksScreen = ({ route }: any) => {
                           );
                         }
                       }}
-                    >
-                      <Text style={[
+            >
+              <Text style={[
                         styles.dynamicPillText,
                         (status === 'all' ? selectedStatuses.length === 0 : selectedStatuses.includes(status)) && styles.dynamicPillTextActive
-                      ]}>
+              ]}>
                         {status.charAt(0).toUpperCase() + status.slice(1)}
-                      </Text>
+              </Text>
                     </TouchableOpacity>
                   ))}
                 </>
@@ -1171,13 +1167,13 @@ const TasksScreen = ({ route }: any) => {
                         );
                       }}
                     >
-                      <Text style={[
+              <Text style={[
                         styles.dynamicPillText,
                         selectedPriorities.includes(priority) && styles.dynamicPillTextActive
-                      ]}>
+              ]}>
                         {priority.charAt(0).toUpperCase() + priority.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
+              </Text>
+            </TouchableOpacity>
                   ))}
                 </>
               )}
@@ -1191,9 +1187,9 @@ const TasksScreen = ({ route }: any) => {
                     { key: 'month', label: 'This Month' },
                     { key: 'overdue', label: 'Overdue' }
                   ].map((dateOption) => (
-                    <TouchableOpacity
+              <TouchableOpacity
                       key={dateOption.key}
-                      style={[
+                style={[
                         styles.dynamicPill,
                         selectedDateFilter === dateOption.key && styles.dynamicPillActive
                       ]}
@@ -1202,13 +1198,13 @@ const TasksScreen = ({ route }: any) => {
                           selectedDateFilter === dateOption.key ? null : dateOption.key
                         );
                       }}
-                    >
-                      <Text style={[
+              >
+                <Text style={[
                         styles.dynamicPillText,
                         selectedDateFilter === dateOption.key && styles.dynamicPillTextActive
-                      ]}>
+                ]}>
                         {dateOption.label}
-                      </Text>
+                </Text>
                     </TouchableOpacity>
                   ))}
                 </>
@@ -1244,7 +1240,7 @@ const TasksScreen = ({ route }: any) => {
                         <View style={styles.filterListAvatar}>
                           <Text style={styles.filterListAvatarText}>
                             {(user.name?.charAt(0) || user.email?.charAt(0) || '?').toUpperCase()}
-                          </Text>
+                </Text>
                         </View>
                         <View>
                           <Text style={styles.filterListRowTitle}>{user.name || 'Unnamed User'}</Text>
@@ -1256,8 +1252,8 @@ const TasksScreen = ({ route }: any) => {
                       {selectedAssignees.includes(user.id) && (
                         <Ionicons name="checkmark-circle" size={22} color="#137fec" />
                       )}
-                    </TouchableOpacity>
-                  ))}
+              </TouchableOpacity>
+            ))}
                 </>
               )}
 
@@ -1338,8 +1334,8 @@ const TasksScreen = ({ route }: any) => {
                   ))}
                 </>
               )}
-            </ScrollView>
-          </View>
+          </ScrollView>
+        </View>
         )}
 
         {/* Task List/Grid */}
@@ -2290,31 +2286,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: '#fef3c7',
     paddingHorizontal: 7,
     paddingVertical: 4,
-    borderRadius: 8,
   },
   timeText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#92400e',
+    color: '#10b981',
   },
   subtaskBadgeNew: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: '#f3e8ff',
+    backgroundColor: '#f3f4f6',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#e9d5ff',
+    borderColor: '#d1d5db',
   },
   subtaskBadgeTextNew: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#8b5cf6',
+    color: '#6b7280',
   },
   parentBadgeNew: {
     width: 24,
@@ -2371,50 +2365,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#fef3c7',
+    backgroundColor: '#f3f4f6',
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderWidth: 1.5,
-    borderColor: '#f59e0b',
-    shadowColor: '#f59e0b',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
   },
   subtaskBadgeText: { 
     fontSize: 11, 
     fontWeight: '700', 
-    color: '#d97706',
+    color: '#6b7280',
     letterSpacing: 0.2,
   },
   parentTaskBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#e0f2fe',
+    backgroundColor: '#f3f4f6',
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderWidth: 1.5,
-    borderColor: '#0ea5e9',
-    shadowColor: '#0ea5e9',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
   },
   parentTaskBadgeText: { 
     fontSize: 11, 
     fontWeight: '700', 
-    color: '#0277bd',
+    color: '#6b7280',
     letterSpacing: 0.2,
   },
   modalBackdrop: {
