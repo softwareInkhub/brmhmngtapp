@@ -682,22 +682,24 @@ const TasksScreen = ({ route }: any) => {
                       </Text>
                     </View>
 
-                    {/* Time Badge */}
-                    {item.estimatedHours > 0 && (
-                      <View style={styles.timeContainer}>
-                        <Ionicons name="time-outline" size={12} color="#92400e" />
-                        <Text style={styles.timeText}>{item.estimatedHours}h</Text>
-                      </View>
-                    )}
                   </View>
                 </View>
               </View>
-              <TouchableOpacity
-                style={styles.menuButton}
-                onPress={() => handleMenuPress(item.id, item.title || 'Untitled Task')}
-              >
-                <Ionicons name="ellipsis-horizontal" size={18} color="#6b7280" />
-              </TouchableOpacity>
+              <View style={styles.taskCardHeaderRight}>
+                {/* Time Badge */}
+                {item.estimatedHours > 0 && (
+                  <View style={styles.timeContainer}>
+                    <Ionicons name="time-outline" size={12} color="#10b981" />
+                    <Text style={styles.timeText}>{item.estimatedHours}h</Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={styles.menuButton}
+                  onPress={() => handleMenuPress(item.id, item.title || 'Untitled Task')}
+                >
+                  <Ionicons name="ellipsis-horizontal" size={18} color="#6b7280" />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Progress Section */}
@@ -2067,6 +2069,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12,
   },
+  taskCardHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   taskCardHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -2365,12 +2372,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
   },
   subtaskBadgeText: { 
     fontSize: 11, 
@@ -2382,12 +2383,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
   },
   parentTaskBadgeText: { 
     fontSize: 11, 
